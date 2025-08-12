@@ -22,6 +22,8 @@ target_include_directories(lizard_audio
     ${drflac_SOURCE_DIR}
 )
 
+target_link_libraries(lizard_audio PRIVATE embedded_assets)
+
 set(AUDIO_BACKEND "ALSA" CACHE STRING "Audio backend (WASAPI, CoreAudio, ALSA)")
 set_property(CACHE AUDIO_BACKEND PROPERTY STRINGS WASAPI CoreAudio ALSA)
 

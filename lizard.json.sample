@@ -10,6 +10,8 @@
   "fullscreen_pause": true,
   "exclude_processes": [],
   "ignore_injected": true,
+  "sound_path": "",
+  "emoji_path": "",
   "audio_backend": "miniaudio",
   "fps_mode": "auto",
   "fps_fixed": 60

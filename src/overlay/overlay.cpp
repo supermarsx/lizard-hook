@@ -3,12 +3,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <thread>
 #include <vector>
 
 #include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#include "embedded.h"
 
 namespace lizard::overlay {
 
@@ -31,7 +35,7 @@ struct Badge {
 
 class Overlay {
 public:
-  bool init();
+  bool init(std::optional<std::filesystem::path> emoji_path = std::nullopt);
   void shutdown();
   void spawn_badge(int sprite, float x, float y);
   void run();
@@ -51,16 +55,7 @@ private:
   bool m_running = false;
 };
 
-// Embedded 1x1 PNG placeholder
-static const unsigned char atlas_png[] = {
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x04, 0x00, 0x00, 0x00, 0xb5, 0x1c, 0x0c, 0x02, 0x00, 0x00, 0x00,
-    0x0b, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
-    0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
-
-bool Overlay::init() {
+bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
   platform::WindowDesc desc{800, 600};
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
@@ -69,15 +64,19 @@ bool Overlay::init() {
 
   // Load atlas
   int w, h, channels;
-  unsigned char *pixels =
-      stbi_load_from_memory(atlas_png, sizeof(atlas_png), &w, &h, &channels, 4);
+  unsigned char *pixels = nullptr;
+  if (emoji_path && std::filesystem::exists(*emoji_path)) {
+    pixels = stbi_load(emoji_path->string().c_str(), &w, &h, &channels, 4);
+  } else {
+    pixels = stbi_load_from_memory(lizard::assets::lizard_regular_png,
+                                   lizard::assets::lizard_regular_png_len, &w, &h, &channels, 4);
+  }
   if (!pixels) {
     return false;
   }
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-               pixels);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   stbi_image_free(pixels);
@@ -97,23 +96,19 @@ bool Overlay::init() {
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
 
   glGenBuffers(1, &m_instance);
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
-  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 6, nullptr,
-               GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 6, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
   glVertexAttribDivisor(2, 1);
   glEnableVertexAttribArray(3);
-  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(2 * sizeof(float)));
   glVertexAttribDivisor(3, 1);
   glEnableVertexAttribArray(4);
-  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                        (void *)(4 * sizeof(float)));
+  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(4 * sizeof(float)));
   glVertexAttribDivisor(4, 1);
 
   const char *vs = R"GLSL(
@@ -182,10 +177,9 @@ void Overlay::update(float dt) {
     b.alpha = 1.0f - t;
     b.scale = 0.1f + 0.1f * t;
   }
-  m_badges.erase(
-      std::remove_if(m_badges.begin(), m_badges.end(),
-                     [](const Badge &b) { return b.time >= b.lifetime; }),
-      m_badges.end());
+  m_badges.erase(std::remove_if(m_badges.begin(), m_badges.end(),
+                                [](const Badge &b) { return b.time >= b.lifetime; }),
+                 m_badges.end());
 }
 
 void Overlay::render() {
