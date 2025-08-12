@@ -13,7 +13,13 @@ cmake --build build --target test
 
 Third-party dependencies are cloned at configure time; an Internet connection is required for the first build.
 
-Static analysis and formatting checks can be run with:
+Format the source tree with:
+
+```sh
+cmake --build build --target format
+```
+
+Run static analysis and formatting checks with:
 
 ```sh
 cmake --build build --target lint
