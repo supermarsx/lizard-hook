@@ -131,8 +131,8 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
   g_signal_connect(g_status_icon, "popup-menu", G_CALLBACK(on_popup), nullptr);
   gtk_status_icon_set_visible(g_status_icon, TRUE);
   gtk_status_icon_set_has_tooltip(g_status_icon, TRUE);
-  gtk_status_icon_set_tooltip_text(g_status_icon, "Lizard Tapper");
-  gtk_status_icon_set_title(g_status_icon, "Lizard Tapper");
+    gtk_status_icon_set_tooltip_text(g_status_icon, "Lizard Hook");
+    gtk_status_icon_set_title(g_status_icon, "Lizard Hook");
   gtk_status_icon_set_name(g_status_icon, "lizard");
   gtk_status_icon_set_from_icon_name(g_status_icon, "indicator-messages");
 #endif

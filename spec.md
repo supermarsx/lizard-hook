@@ -1,6 +1,6 @@
 gotcha — specs only, no code. here’s a tight C++ build spec your AI agent can execute.
 
-# Project: Lizard Tapper (Win32 C++)
+# Project: Lizard Hook (Win32 C++)
 
 ## 1) Goal
 
@@ -38,7 +38,7 @@ All third-party libs vendored in `third_party/` as source (no dynamic DLLs). Sta
 * **Animator**: timeline + easing for opacity/scale; 60 FPS target using a high-res timer.
 * **Config Manager**: loads `lizard.json` (see §10), environment overrides, hotkeys.
 * **Telemetry**: none. (Explicitly disabled.)
-* **Logging**: rotating file in `%LOCALAPPDATA%\LizardTapper\logs\`; verbose levels controlled by config.
+* **Logging**: rotating file in `%LOCALAPPDATA%\LizardHook\logs\`; verbose levels controlled by config.
 
 ## 5) UX / Behavior
 
@@ -102,7 +102,7 @@ All third-party libs vendored in `third_party/` as source (no dynamic DLLs). Sta
 
 ## 10) Configuration (`lizard.json`)
 
-* Location precedence: CLI `--config`, `%LOCALAPPDATA%\LizardTapper\lizard.json`, alongside EXE.
+* Location precedence: CLI `--config`, `%LOCALAPPDATA%\LizardHook\lizard.json`, alongside EXE.
 * Keys (examples):
 
   * `enabled` (bool, default true)
@@ -297,7 +297,7 @@ If you want, I can turn this into a machine-readable **build brief** for your ag
 * `emoji_pngs` (array of atlas sprite names) or `emoji_atlas` (path).
 * `max_concurrent_playbacks` (int, default 16).
 * `fps_mode` (`"auto"|"fixed"`), `fps_fixed` (default 60).
-* Platform config roots: Windows `%LOCALAPPDATA%/LizardTapper/`, Linux `$XDG_CONFIG_HOME/lizard_tapper/`, macOS `~/Library/Application Support/LizardTapper/`.
+* Platform config roots: Windows `%LOCALAPPDATA%/LizardHook/`, Linux `$XDG_CONFIG_HOME/lizard_hook/`, macOS `~/Library/Application Support/LizardHook/`.
 
 ## Build Notes (Windows MinGW)
 

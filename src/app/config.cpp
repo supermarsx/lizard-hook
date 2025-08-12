@@ -47,25 +47,25 @@ Config::~Config() { watcher_.request_stop(); }
 
 std::filesystem::path Config::user_config_path() {
 #ifdef _WIN32
-  if (auto *local = std::getenv("LOCALAPPDATA")) {
-    return std::filesystem::path(local) / "LizardTapper" / "lizard.json";
-  }
+    if (auto *local = std::getenv("LOCALAPPDATA")) {
+      return std::filesystem::path(local) / "LizardHook" / "lizard.json";
+    }
 #elif __APPLE__
-  if (auto *home = std::getenv("HOME")) {
-    return std::filesystem::path(home) / "Library" / "Application Support" /
-           "LizardTapper" / "lizard.json";
-  }
+    if (auto *home = std::getenv("HOME")) {
+      return std::filesystem::path(home) / "Library" / "Application Support" /
+             "LizardHook" / "lizard.json";
+    }
 #else
-  if (auto *xdg = std::getenv("XDG_CONFIG_HOME")) {
-    return std::filesystem::path(xdg) / "lizard_tapper" / "lizard.json";
-  }
-  if (auto *home = std::getenv("HOME")) {
-    return std::filesystem::path(home) / ".config" / "lizard_tapper" /
-           "lizard.json";
-  }
+    if (auto *xdg = std::getenv("XDG_CONFIG_HOME")) {
+      return std::filesystem::path(xdg) / "lizard_hook" / "lizard.json";
+    }
+    if (auto *home = std::getenv("HOME")) {
+      return std::filesystem::path(home) / ".config" / "lizard_hook" /
+             "lizard.json";
+    }
 #endif
-  return {};
-}
+    return {};
+  }
 
 void Config::load() {
   std::ifstream in(config_path_);
