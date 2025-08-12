@@ -1,18 +1,59 @@
 {
+  // Enable or disable the overlay entirely
   "enabled": true,
+
+  // Mute all audio output
   "mute": false,
+
+  // Minimum milliseconds between sound playbacks
   "sound_cooldown_ms": 150,
-  "max_concurrent_playbacks": 16,
+
+  // Maximum number of concurrent sound playbacks
+  "max_concurrent_playbacks": 4,
+
+  // Maximum badge spawn rate per second
   "badges_per_second_max": 12,
+
+  // Badge size range in pixels
   "badge_min_px": 60,
   "badge_max_px": 108,
-  "emoji": ["🦎"],
+
+  // List of emoji to use for badges (ignored if emoji_weighted is set)
+  "emoji": ["\ud83e\udd8e"],
+
+  // Weighted emoji map: emoji => relative weight (mutually exclusive with emoji)
+  // "emoji_weighted": { "\ud83e\udd8e": 1.0, "\ud83d\udc09": 0.2 },
+
+  // Pause the overlay when a fullscreen app is detected
   "fullscreen_pause": true,
+
+  // Executable names to ignore (case-insensitive)
   "exclude_processes": [],
+
+  // Ignore events injected by other software
   "ignore_injected": true,
+
+  // Optional paths to external assets overriding the built-ins
   "sound_path": "",
   "emoji_path": "",
+
+  // Audio backend implementation
   "audio_backend": "miniaudio",
+
+  // Badge spawn strategy: "random_screen" or "near_caret"
+  "badge_spawn_strategy": "random_screen",
+
+  // Output volume percentage
+  "volume_percent": 65,
+
+  // DPI scaling mode: "per_monitor_v2" or "system"
+  "dpi_scaling_mode": "per_monitor_v2",
+
+  // Logging verbosity level
+  "logging_level": "info",
+
+  // Frame pacing mode: "auto" uses monitor refresh, "fixed" uses fps_fixed
   "fps_mode": "auto",
+  // Fixed FPS value when fps_mode == "fixed"
   "fps_fixed": 60
 }

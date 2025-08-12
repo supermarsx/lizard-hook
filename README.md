@@ -19,6 +19,20 @@ Static analysis and formatting checks can be run with:
 cmake --build build --target lint
 ```
 
+## Configuration
+
+A complete example configuration with comments lives in `lizard.json.sample`.
+Copy this file to `lizard.json` and adjust values as needed. Remove the comments before use, as the parser expects valid JSON.
+
+Configuration files are located using the following precedence (first existing wins):
+
+1. Path supplied via `--config` on the command line
+2. User config directory
+   - Windows: `%LOCALAPPDATA%/LizardHook/lizard.json`
+   - macOS: `~/Library/Application Support/LizardHook/lizard.json`
+   - Linux: `$XDG_CONFIG_HOME/lizard_hook/lizard.json` or `~/.config/lizard_hook/lizard.json`
+3. `lizard.json` next to the executable
+
 ## Assets
 
 Default sound and emoji image assets are stored in the `assets/` directory and
