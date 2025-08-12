@@ -1,0 +1,119 @@
+#include "hook/keyboard_hook.h"
+
+// Note: Wayland compositors generally prohibit global keyboard hooks.
+// This implementation requires an X11 session.
+
+#include <X11/Xlib.h>
+#include <X11/Xproto.h>
+#include <X11/extensions/XInput2.h>
+#include <X11/extensions/record.h>
+
+#include <thread>
+
+namespace hook {
+
+namespace {
+
+class LinuxKeyboardHook : public KeyboardHook {
+public:
+  explicit LinuxKeyboardHook(KeyCallback cb) : callback_(std::move(cb)) {}
+  ~LinuxKeyboardHook() override { stop(); }
+
+  bool start() override {
+    if (running_) {
+      return false;
+    }
+    running_ = true;
+    thread_ = std::jthread([this](std::stop_token st) { run(st); });
+    return true;
+  }
+
+  void stop() override {
+    if (!running_) {
+      return;
+    }
+    running_ = false;
+    if (thread_.joinable()) {
+      thread_.request_stop();
+      thread_.join();
+    }
+  }
+
+private:
+  void run(std::stop_token st) {
+    Display *dpy = XOpenDisplay(nullptr);
+    if (!dpy) {
+      return;
+    }
+    int xi_opcode = 0, event, error;
+    if (XQueryExtension(dpy, "XInputExtension", &xi_opcode, &event, &error)) {
+      XIEventMask mask;
+      unsigned char m[XIMaskLen(XI_LASTEVENT)] = {0};
+      mask.deviceid = XIAllMasterDevices;
+      mask.mask_len = sizeof(m);
+      mask.mask = m;
+      XISetMask(m, XI_RawKeyPress);
+      XISetMask(m, XI_RawKeyRelease);
+      XISelectEvents(dpy, DefaultRootWindow(dpy), &mask, 1);
+      XEvent ev;
+      while (!st.stop_requested()) {
+        XNextEvent(dpy, &ev);
+        if (ev.xcookie.type == GenericEvent &&
+            ev.xcookie.extension == xi_opcode &&
+            XGetEventData(dpy, &ev.xcookie)) {
+          if (ev.xcookie.evtype == XI_RawKeyPress ||
+              ev.xcookie.evtype == XI_RawKeyRelease) {
+            auto *raw = static_cast<XIRawEvent *>(ev.xcookie.data);
+            bool pressed = ev.xcookie.evtype == XI_RawKeyPress;
+            callback_(raw->detail, pressed);
+          }
+          XFreeEventData(dpy, &ev.xcookie);
+        }
+      }
+    } else {
+      // Fallback to legacy XRecord if XInput2 is unavailable.
+      int major, minor;
+      if (XRecordQueryVersion(dpy, &major, &minor)) {
+        Display *data_dpy = XOpenDisplay(nullptr);
+        XRecordRange *range = XRecordAllocRange();
+        range->device_events.first = KeyPress;
+        range->device_events.last = KeyRelease;
+        XRecordClientSpec clients = XRecordAllClients;
+        auto handler = [](XPointer ctx, XRecordInterceptData *data) {
+          auto *self = reinterpret_cast<LinuxKeyboardHook *>(ctx);
+          if (data->category == XRecordFromServer) {
+            const xEvent *ev = reinterpret_cast<const xEvent *>(data->data);
+            bool pressed = ev->u.u.type == KeyPress;
+            unsigned int key = ev->u.u.detail;
+            self->callback_(key, pressed);
+          }
+          XRecordFreeData(data);
+        };
+        XRecordContext rec =
+            XRecordCreateContext(dpy, 0, &clients, 1, &range, 1);
+        XRecordEnableContextAsync(data_dpy, rec, handler,
+                                  reinterpret_cast<XPointer>(this));
+        while (!st.stop_requested()) {
+          XRecordProcessReplies(data_dpy);
+        }
+        XRecordDisableContext(dpy, rec);
+        XRecordFreeContext(dpy, rec);
+        XCloseDisplay(data_dpy);
+        XFree(range);
+      }
+    }
+    XCloseDisplay(dpy);
+  }
+
+  KeyCallback callback_;
+  std::jthread thread_;
+  bool running_{false};
+};
+
+} // namespace
+
+std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback) {
+  return std::make_unique<LinuxKeyboardHook>(std::move(callback));
+}
+
+} // namespace hook
