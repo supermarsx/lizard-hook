@@ -1,0 +1,1 @@
+add_library(lizard_platform_linux INTERFACE)
