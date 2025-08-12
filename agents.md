@@ -1,4 +1,4 @@
-# AGENT SPEC — Lizard Tapper
+# AGENT SPEC — Lizard Hook
 
 > Ground truth: use v1.1 updates. OpenGL + PNG atlas + MinGW‑w64 default. Cross‑platform targets (Windows/macOS/Linux). No emoji fonts; no D3D/D2D.
 
@@ -6,7 +6,7 @@
 
 ## Objectives
 
-- Build, test, and package **Lizard Tapper**: a lightweight keyboard‑event reactive overlay that plays a short FLAC sample and spawns fading emoji badges without stealing focus.
+- Build, test, and package **Lizard Hook**: a lightweight keyboard‑event reactive overlay that plays a short FLAC sample and spawns fading emoji badges without stealing focus.
 
 - Produce a **single portable binary** per platform (no installer). Assets embedded by default; configurable overrides allowed.
 
@@ -243,7 +243,7 @@ cmake --build --preset macos-release -j
 
 - Embed `assets/lizard.flac` and emoji atlas PNG into binary resources by default.
 
-- Also emit a portable zip per platform containing: `LizardTapper[.exe]`, `lizard.json.sample`, `README.md`, `LICENSE`, `VERSION`.
+- Also emit a portable zip per platform containing: `LizardHook[.exe]`, `lizard.json.sample`, `README.md`, `LICENSE`, `VERSION`.
 
 - Windows: add `.ico` multi‑size icon.
 
@@ -397,7 +397,7 @@ Matrix jobs: `windows-latest` (mingw), `ubuntu-latest`, `macos-latest`.
 
 - Semver in `VERSION`. Changelog in GitHub Releases.
 
-- Artifacts: `LizardTapper-win-x64.zip`, `LizardTapper-macos.zip`, `LizardTapper-linux-x64.tar.gz`.
+- Artifacts: `LizardHook-win-x64.zip`, `LizardHook-macos.zip`, `LizardHook-linux-x64.tar.gz`.
 
 - Optional code signing: Windows Authenticode; macOS codesign + notarization (if account available).
 

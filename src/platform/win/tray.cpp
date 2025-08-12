@@ -123,7 +123,7 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
   g_nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   g_nid.uCallbackMessage = WM_TRAY;
   g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-  lstrcpyW(g_nid.szTip, L"Lizard Tapper");
+    lstrcpyW(g_nid.szTip, L"Lizard Hook");
   Shell_NotifyIconW(NIM_ADD, &g_nid);
   return true;
 }
