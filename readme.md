@@ -1,6 +1,14 @@
 # lizard-hook
 Lizard Meme Keyboard Hook
 
+## Prerequisites
+
+Linux builds require the GTK3 development files:
+
+```sh
+sudo apt-get install libgtk-3-dev
+```
+
 ## Testing
 
 Build and run the test suite:

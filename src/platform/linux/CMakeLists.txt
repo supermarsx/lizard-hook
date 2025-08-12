@@ -1,5 +1,8 @@
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+pkg_check_modules(GTK3 gtk+-3.0)
+if(NOT GTK3_FOUND)
+  message(FATAL_ERROR "gtk+-3.0 not found. Install the GTK3 development files (e.g., libgtk-3-dev).")
+endif()
 pkg_check_modules(APPINDICATOR ayatana-appindicator3-0.1 QUIET)
 
 add_library(lizard_platform_linux window.cpp tray.cpp)
