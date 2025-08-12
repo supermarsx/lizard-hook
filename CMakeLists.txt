@@ -52,6 +52,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+add_subdirectory(assets)
 add_subdirectory(src/app)
 add_subdirectory(src/hook)
 add_subdirectory(src/audio)

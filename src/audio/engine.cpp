@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "embedded.h"
 
 #if defined(LIZARD_AUDIO_WASAPI)
 #define MA_ENABLE_WASAPI
@@ -29,8 +32,24 @@ struct DecodedSample {
   ma_uint32 sampleRate = 0;
 };
 
-std::optional<DecodedSample> load_flac(const std::string &path) {
+std::optional<DecodedSample> load_flac_file(const std::string &path) {
   drflac *flac = drflac_open_file(path.c_str(), nullptr);
+  if (flac == nullptr) {
+    return std::nullopt;
+  }
+
+  DecodedSample sample;
+  sample.frames = flac->totalPCMFrameCount;
+  sample.channels = flac->channels;
+  sample.sampleRate = flac->sampleRate;
+  sample.pcm.resize(sample.frames * sample.channels);
+  drflac_read_pcm_frames_f32(flac, sample.frames, sample.pcm.data());
+  drflac_close(flac);
+  return sample;
+}
+
+std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t size) {
+  drflac *flac = drflac_open_memory(data, size, nullptr);
   if (flac == nullptr) {
     return std::nullopt;
   }
@@ -53,21 +72,26 @@ public:
 
   ~Engine() { shutdown(); }
 
-  bool init() {
+  bool init(std::optional<std::filesystem::path> sound_path = std::nullopt) {
     ma_result result = ma_engine_init(nullptr, &m_engine);
     if (result != MA_SUCCESS) {
       return false;
     }
 
-    auto decoded = load_flac("assets/lizard.flac");
+    std::optional<DecodedSample> decoded;
+    if (sound_path && std::filesystem::exists(*sound_path)) {
+      decoded = load_flac_file(sound_path->string());
+    } else {
+      decoded = load_flac_memory(lizard::assets::lizard_processed_clean_no_meta_flac,
+                                 lizard::assets::lizard_processed_clean_no_meta_flac_len);
+    }
     if (!decoded) {
       ma_engine_uninit(&m_engine);
       return false;
     }
 
-    m_bufferConfig = ma_audio_buffer_config_init(
-        ma_format_f32, decoded->channels, decoded->frames, decoded->pcm.data(),
-        nullptr);
+    m_bufferConfig = ma_audio_buffer_config_init(ma_format_f32, decoded->channels, decoded->frames,
+                                                 decoded->pcm.data(), nullptr);
     result = ma_audio_buffer_init(&m_bufferConfig, &m_buffer);
     if (result != MA_SUCCESS) {
       ma_engine_uninit(&m_engine);
@@ -76,8 +100,7 @@ public:
 
     m_voices.resize(m_maxPlaybacks);
     for (auto &voice : m_voices) {
-      ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr,
-                                     &voice.sound);
+      ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
     }
     return true;
   }
@@ -107,9 +130,8 @@ public:
     }
 
     if (target == nullptr) {
-      target = &*std::min_element(
-          m_voices.begin(), m_voices.end(),
-          [](const Voice &a, const Voice &b) { return a.start < b.start; });
+      target = &*std::min_element(m_voices.begin(), m_voices.end(),
+                                  [](const Voice &a, const Voice &b) { return a.start < b.start; });
       ma_sound_stop(&target->sound);
     }
 

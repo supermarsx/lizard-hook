@@ -31,3 +31,17 @@ TEST_CASE("parses provided values", "[config]") {
 
   std::filesystem::remove(cfg_file);
 }
+
+TEST_CASE("parses asset paths", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_paths.json";
+  std::ofstream out(cfg_file);
+  out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+  out.close();
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.sound_path().has_value());
+  REQUIRE(cfg.emoji_path().has_value());
+
+  std::filesystem::remove(cfg_file);
+}
