@@ -71,9 +71,18 @@ if(BUILD_TESTING)
   add_subdirectory(src/tests)
 endif()
 
-file(GLOB_RECURSE ALL_CXX_SOURCE_FILES CONFIGURE_DEPENDS src/tests/*.cpp src/tests/*.h)
-file(GLOB_RECURSE ALL_CXX_SOURCE_CPP CONFIGURE_DEPENDS src/tests/*.cpp)
+file(GLOB_RECURSE ALL_CXX_SOURCE_FILES CONFIGURE_DEPENDS
+  src/*.cpp
+  src/*.hpp
+  src/*.h
+)
+file(GLOB_RECURSE ALL_CXX_SOURCE_CPP CONFIGURE_DEPENDS src/*.cpp)
+
+add_custom_target(format
+  COMMAND clang-format -i ${ALL_CXX_SOURCE_FILES}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_custom_target(lint
-  COMMAND clang-format --dry-run ${ALL_CXX_SOURCE_FILES}
+  COMMAND clang-format --dry-run --Werror ${ALL_CXX_SOURCE_FILES}
   COMMAND clang-tidy ${ALL_CXX_SOURCE_CPP} -p ${CMAKE_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
