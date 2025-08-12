@@ -35,3 +35,19 @@ into binary arrays that are linked into the final binary.
 To override these defaults at runtime, set `sound_path` and `emoji_path` in the
 `lizard.json` configuration file to point to external files. When these paths
 are provided, external assets will be loaded instead of the embedded ones.
+
+## Configuration
+
+All available configuration options are documented in `lizard.json.sample`.
+Copy this file to `lizard.json` and edit as needed.
+
+Configuration values are loaded from the first location that exists:
+
+1. A path supplied via the `--config` command-line option.
+2. The per-user config directory:
+   - Windows: `%LOCALAPPDATA%/LizardHook/lizard.json`
+   - macOS: `$HOME/Library/Application Support/LizardHook/lizard.json`
+   - Linux: `$XDG_CONFIG_HOME/lizard_hook/lizard.json` or `~/.config/lizard_hook/lizard.json`
+3. `lizard.json` located next to the executable.
+
+The application watches the selected file and reloads it automatically when it changes.
