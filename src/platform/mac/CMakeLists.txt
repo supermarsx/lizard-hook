@@ -1,1 +1,5 @@
-add_library(lizard_platform_mac INTERFACE)
+add_library(lizard_platform_mac window.mm)
+
+target_include_directories(lizard_platform_mac PUBLIC ${CMAKE_CURRENT_LIST_DIR}/..)
+
+target_link_libraries(lizard_platform_mac PUBLIC "-framework Cocoa" "-framework OpenGL")
