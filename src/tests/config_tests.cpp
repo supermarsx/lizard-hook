@@ -71,3 +71,38 @@ TEST_CASE("reloads on file change", "[config]") {
 
   std::filesystem::remove(cfg_file);
 }
+
+TEST_CASE("clamps out-of-range numeric values", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_invalid.json";
+  std::ofstream out(cfg_file);
+  out << R"({"sound_cooldown_ms":-5,"max_concurrent_playbacks":-1,
+"badges_per_second_max":-3,"badge_min_px":-20,"badge_max_px":-10,
+"volume_percent":-50})";
+  out.close();
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.sound_cooldown_ms() == 0);
+  REQUIRE(cfg.max_concurrent_playbacks() == 0);
+  REQUIRE(cfg.badges_per_second_max() == 0);
+  REQUIRE(cfg.badge_min_px() == 0);
+  REQUIRE(cfg.badge_max_px() == 0);
+  REQUIRE(cfg.volume_percent() == 0);
+
+  std::filesystem::remove(cfg_file);
+}
+
+TEST_CASE("enforces badge size ordering", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_badge_order.json";
+  std::ofstream out(cfg_file);
+  out << R"({"badge_min_px":120,"badge_max_px":100,"volume_percent":150})";
+  out.close();
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.badge_min_px() == 120);
+  REQUIRE(cfg.badge_max_px() == 120);
+  REQUIRE(cfg.volume_percent() == 100);
+
+  std::filesystem::remove(cfg_file);
+}
