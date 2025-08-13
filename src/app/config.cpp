@@ -26,22 +26,26 @@ Config::Config(std::filesystem::path executable_dir,
     }
   }
 
-  load();
-  if (std::filesystem::exists(config_path_)) {
-    last_write_ = std::filesystem::last_write_time(config_path_);
+  {
+    std::unique_lock lock(mutex_);
+    load(lock);
+    if (std::filesystem::exists(config_path_)) {
+      last_write_ = std::filesystem::last_write_time(config_path_);
+    }
   }
 
   watcher_ = std::jthread([this](std::stop_token st) {
     using namespace std::chrono_literals;
     while (!st.stop_requested()) {
       std::this_thread::sleep_for(1s);
+      std::unique_lock lock(mutex_);
       if (!std::filesystem::exists(config_path_)) {
         continue;
       }
       auto current = std::filesystem::last_write_time(config_path_);
       if (current != last_write_) {
         last_write_ = current;
-        load();
+        load(lock);
       }
     }
   });
@@ -70,7 +74,8 @@ std::filesystem::path Config::user_config_path() {
   return {};
 }
 
-void Config::load() {
+void Config::load(std::unique_lock<std::shared_mutex> &lock) {
+  (void)lock; // lock is held by caller
   std::ifstream in(config_path_);
   if (!in.is_open()) {
     spdlog::warn("Could not open config file: {}", config_path_.string());
@@ -145,44 +150,99 @@ void Config::load() {
   lizard::util::init_logging(logging_level_);
 }
 
-bool Config::enabled() const { return enabled_; }
+bool Config::enabled() const {
+  std::shared_lock lock(mutex_);
+  return enabled_;
+}
 
-bool Config::mute() const { return mute_; }
+bool Config::mute() const {
+  std::shared_lock lock(mutex_);
+  return mute_;
+}
 
-const std::vector<std::string> &Config::emoji() const { return emoji_; }
+std::vector<std::string> Config::emoji() const {
+  std::shared_lock lock(mutex_);
+  return emoji_;
+}
 
-const std::unordered_map<std::string, double> &Config::emoji_weighted() const {
+std::unordered_map<std::string, double> Config::emoji_weighted() const {
+  std::shared_lock lock(mutex_);
   return emoji_weighted_;
 }
 
-const std::optional<std::filesystem::path> &Config::sound_path() const { return sound_path_; }
+std::optional<std::filesystem::path> Config::sound_path() const {
+  std::shared_lock lock(mutex_);
+  return sound_path_;
+}
 
-const std::optional<std::filesystem::path> &Config::emoji_path() const { return emoji_path_; }
+std::optional<std::filesystem::path> Config::emoji_path() const {
+  std::shared_lock lock(mutex_);
+  return emoji_path_;
+}
 
-int Config::sound_cooldown_ms() const { return sound_cooldown_ms_; }
+int Config::sound_cooldown_ms() const {
+  std::shared_lock lock(mutex_);
+  return sound_cooldown_ms_;
+}
 
-int Config::max_concurrent_playbacks() const { return max_concurrent_playbacks_; }
+int Config::max_concurrent_playbacks() const {
+  std::shared_lock lock(mutex_);
+  return max_concurrent_playbacks_;
+}
 
-int Config::badges_per_second_max() const { return badges_per_second_max_; }
+int Config::badges_per_second_max() const {
+  std::shared_lock lock(mutex_);
+  return badges_per_second_max_;
+}
 
-int Config::badge_min_px() const { return badge_min_px_; }
+int Config::badge_min_px() const {
+  std::shared_lock lock(mutex_);
+  return badge_min_px_;
+}
 
-int Config::badge_max_px() const { return badge_max_px_; }
+int Config::badge_max_px() const {
+  std::shared_lock lock(mutex_);
+  return badge_max_px_;
+}
 
-bool Config::fullscreen_pause() const { return fullscreen_pause_; }
+bool Config::fullscreen_pause() const {
+  std::shared_lock lock(mutex_);
+  return fullscreen_pause_;
+}
 
-const std::vector<std::string> &Config::exclude_processes() const { return exclude_processes_; }
+std::vector<std::string> Config::exclude_processes() const {
+  std::shared_lock lock(mutex_);
+  return exclude_processes_;
+}
 
-bool Config::ignore_injected() const { return ignore_injected_; }
+bool Config::ignore_injected() const {
+  std::shared_lock lock(mutex_);
+  return ignore_injected_;
+}
 
-const std::string &Config::audio_backend() const { return audio_backend_; }
+std::string Config::audio_backend() const {
+  std::shared_lock lock(mutex_);
+  return audio_backend_;
+}
 
-const std::string &Config::badge_spawn_strategy() const { return badge_spawn_strategy_; }
+std::string Config::badge_spawn_strategy() const {
+  std::shared_lock lock(mutex_);
+  return badge_spawn_strategy_;
+}
 
-int Config::volume_percent() const { return volume_percent_; }
+int Config::volume_percent() const {
+  std::shared_lock lock(mutex_);
+  return volume_percent_;
+}
 
-const std::string &Config::dpi_scaling_mode() const { return dpi_scaling_mode_; }
+std::string Config::dpi_scaling_mode() const {
+  std::shared_lock lock(mutex_);
+  return dpi_scaling_mode_;
+}
 
-const std::string &Config::logging_level() const { return logging_level_; }
+std::string Config::logging_level() const {
+  std::shared_lock lock(mutex_);
+  return logging_level_;
+}
 
 } // namespace lizard::app
