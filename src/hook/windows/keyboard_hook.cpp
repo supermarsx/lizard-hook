@@ -3,11 +3,16 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <future>
 #include <thread>
+
+#include <spdlog/spdlog.h>
 
 namespace hook {
 
 namespace {
+
+using SetHookFn = HHOOK(WINAPI *)(int, HOOKPROC, HINSTANCE, DWORD);
 
 class WindowsKeyboardHook : public KeyboardHook {
 public:
@@ -18,9 +23,16 @@ public:
     if (running_) {
       return false;
     }
-    running_ = true;
-    thread_ = std::jthread([this](std::stop_token st) { run(st); });
-    return true;
+    std::promise<bool> ready;
+    auto future = ready.get_future();
+    thread_ = std::jthread(
+        [this, p = std::move(ready)](std::stop_token st) mutable { run(st, std::move(p)); });
+    bool ok = future.get();
+    running_ = ok;
+    if (!ok && thread_.joinable()) {
+      thread_.join();
+    }
+    return ok;
   }
 
   void stop() override {
@@ -44,10 +56,16 @@ private:
     return CallNextHookEx(nullptr, code, wParam, lParam);
   }
 
-  void run(std::stop_token st) {
+  void run(std::stop_token st, std::promise<bool> started) {
     thread_id_ = GetCurrentThreadId();
+    hook_ = set_hook_(WH_KEYBOARD_LL, &HookProc, nullptr, 0);
+    if (!hook_) {
+      spdlog::error("SetWindowsHookExW failed: {}", GetLastError());
+      started.set_value(false);
+      return;
+    }
     instance_ = this;
-    hook_ = SetWindowsHookExW(WH_KEYBOARD_LL, &HookProc, nullptr, 0);
+    started.set_value(true);
     MSG msg;
     while (!st.stop_requested() && GetMessageW(&msg, nullptr, 0, 0)) {
       // Message loop to keep hook alive.
@@ -62,7 +80,17 @@ private:
   HHOOK hook_{nullptr};
   bool running_{false};
   static inline WindowsKeyboardHook *instance_{nullptr};
+  static inline SetHookFn set_hook_ = &SetWindowsHookExW;
+#ifdef LIZARD_TEST
+  friend void testing::set_setwindows_hook_ex(SetHookFn);
+#endif
 };
+
+#ifdef LIZARD_TEST
+namespace testing {
+inline void set_setwindows_hook_ex(SetHookFn fn) { WindowsKeyboardHook::set_hook_ = fn; }
+} // namespace testing
+#endif
 
 } // namespace
 
