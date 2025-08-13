@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -13,6 +14,9 @@
 #include "stb_image.h"
 
 #include "embedded.h"
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 namespace lizard::overlay {
 
@@ -90,8 +94,33 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   stbi_image_free(pixels);
 
-  // single sprite covering full texture
-  m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
+  // Load sprite UVs from atlas
+  std::ifstream atlas_in(std::filesystem::path("assets") / "atlas.json");
+  if (atlas_in.is_open()) {
+    try {
+      json j;
+      atlas_in >> j;
+      if (j.contains("sprites") && j["sprites"].is_array()) {
+        for (const auto &s : j["sprites"]) {
+          Sprite sp{};
+          sp.u0 = s.value("u0", 0.0f);
+          sp.v0 = s.value("v0", 0.0f);
+          sp.u1 = s.value("u1", 1.0f);
+          sp.v1 = s.value("v1", 1.0f);
+          m_sprites.push_back(sp);
+        }
+      }
+    } catch (const std::exception &) {
+      // fall back to default below
+    }
+  }
+  if (m_sprites.empty()) {
+    m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
+  }
+
+  if (!m_sprites.empty()) {
+    spawn_badge(0, 0.0f, 0.0f);
+  }
 
   // Geometry
   const float verts[] = {-0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, 1.0f, 0.0f,
@@ -109,19 +138,22 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
 
   glGenBuffers(1, &m_instance);
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
-  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 7, nullptr, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 9, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)0);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)0);
   glVertexAttribDivisor(2, 1);
   glEnableVertexAttribArray(3);
-  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(2 * sizeof(float)));
   glVertexAttribDivisor(3, 1);
   glEnableVertexAttribArray(4);
-  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(4 * sizeof(float)));
+  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(4 * sizeof(float)));
   glVertexAttribDivisor(4, 1);
   glEnableVertexAttribArray(5);
-  glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(5 * sizeof(float)));
+  glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(5 * sizeof(float)));
   glVertexAttribDivisor(5, 1);
+  glEnableVertexAttribArray(6);
+  glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(7 * sizeof(float)));
+  glVertexAttribDivisor(6, 1);
 
   const char *vs = R"GLSL(
       #version 330 core
@@ -130,13 +162,14 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
       layout(location=2) in vec2 iPos;
       layout(location=3) in vec2 iScale;
       layout(location=4) in float iAlpha;
-      layout(location=5) in vec2 iUV;
+      layout(location=5) in vec2 iUV0;
+      layout(location=6) in vec2 iUV1;
       out vec2 uv;
       out float alpha;
       void main(){
         vec2 pos = inPos * iScale + iPos;
         gl_Position = vec4(pos,0.0,1.0);
-        uv = inUV * iUV;
+        uv = mix(iUV0, iUV1, inUV);
         alpha = iAlpha;
       })GLSL";
   const char *fs = R"GLSL(
@@ -205,6 +238,7 @@ void Overlay::render() {
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   std::vector<float> data;
+  data.reserve(m_badges.size() * 9);
   for (const auto &b : m_badges) {
     const Sprite &s = m_sprites[b.sprite];
     data.push_back(b.x);
@@ -212,8 +246,10 @@ void Overlay::render() {
     data.push_back(b.scale);
     data.push_back(b.scale);
     data.push_back(b.alpha);
-    data.push_back(s.u1 - s.u0);
-    data.push_back(s.v1 - s.v0);
+    data.push_back(s.u0);
+    data.push_back(s.v0);
+    data.push_back(s.u1);
+    data.push_back(s.v1);
   }
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
   glBufferSubData(GL_ARRAY_BUFFER, 0, data.size() * sizeof(float), data.data());
