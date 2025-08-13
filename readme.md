@@ -82,7 +82,10 @@ into binary arrays that are linked into the final binary.
 
 To override these defaults at runtime, set `sound_path` and `emoji_path` in the
 `lizard.json` configuration file to point to external files. When these paths
-are provided, external assets will be loaded instead of the embedded ones.
+are provided, external assets will be loaded instead of the embedded ones. For
+`emoji_path`, the overlay looks for sprite coordinates in `<emoji_path>.json` or
+an `emoji_atlas.json` file in the same directory. If neither is found, the
+embedded atlas is used.
 
 ## Configuration
 

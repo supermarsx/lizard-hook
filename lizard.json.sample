@@ -32,7 +32,9 @@
   // Path to external sound file; empty string uses embedded asset
   "sound_path": "",
 
-  // Path to external emoji atlas image; empty string uses embedded asset
+  // Path to external emoji atlas image; matching `<emoji_path>.json` or an
+  // `emoji_atlas.json` in the same directory provides sprite coordinates. Empty
+  // string uses embedded assets.
   "emoji_path": "",
 
   // Audio backend selection (default: "miniaudio")
