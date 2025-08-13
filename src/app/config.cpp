@@ -128,4 +128,6 @@ const std::optional<std::filesystem::path> &Config::sound_path() const { return 
 
 const std::optional<std::filesystem::path> &Config::emoji_path() const { return emoji_path_; }
 
+int Config::volume_percent() const { return volume_percent_; }
+
 } // namespace lizard::app
