@@ -112,11 +112,11 @@ void Config::load() {
     badge_spawn_strategy_ = j.value("badge_spawn_strategy", std::string("random_screen"));
 
     int volume_in = j.value("volume_percent", 65);
-    int volume_clamped = std::clamp(volume_in, 0, 100);
-    if (volume_clamped != volume_in) {
-      spdlog::warn("volume_percent ({}) out of range; clamping to {}", volume_in, volume_clamped);
+    volume_percent_ = clamp_nonneg(volume_in, "volume_percent");
+    if (volume_percent_ > 100) {
+      spdlog::warn("volume_percent ({}) out of range; clamping to 100", volume_percent_);
+      volume_percent_ = 100;
     }
-    volume_percent_ = volume_clamped;
 
     dpi_scaling_mode_ = j.value("dpi_scaling_mode", std::string("per_monitor_v2"));
     logging_level_ = j.value("logging_level", std::string("info"));
