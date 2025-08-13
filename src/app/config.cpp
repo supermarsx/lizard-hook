@@ -135,8 +135,30 @@ const std::optional<std::filesystem::path> &Config::sound_path() const { return 
 
 const std::optional<std::filesystem::path> &Config::emoji_path() const { return emoji_path_; }
 
-const std::string &Config::logging_level() const { return logging_level_; }
+int Config::sound_cooldown_ms() const { return sound_cooldown_ms_; }
+
+int Config::max_concurrent_playbacks() const { return max_concurrent_playbacks_; }
+
+int Config::badges_per_second_max() const { return badges_per_second_max_; }
+
+int Config::badge_min_px() const { return badge_min_px_; }
+
+int Config::badge_max_px() const { return badge_max_px_; }
+
+bool Config::fullscreen_pause() const { return fullscreen_pause_; }
+
+const std::vector<std::string> &Config::exclude_processes() const { return exclude_processes_; }
+
+bool Config::ignore_injected() const { return ignore_injected_; }
+
+const std::string &Config::audio_backend() const { return audio_backend_; }
+
+const std::string &Config::badge_spawn_strategy() const { return badge_spawn_strategy_; }
 
 int Config::volume_percent() const { return volume_percent_; }
+
+const std::string &Config::dpi_scaling_mode() const { return dpi_scaling_mode_; }
+
+const std::string &Config::logging_level() const { return logging_level_; }
 
 } // namespace lizard::app

@@ -21,8 +21,19 @@ public:
   const std::unordered_map<std::string, double> &emoji_weighted() const;
   const std::optional<std::filesystem::path> &sound_path() const;
   const std::optional<std::filesystem::path> &emoji_path() const;
-  const std::string &logging_level() const;
+  int sound_cooldown_ms() const;
+  int max_concurrent_playbacks() const;
+  int badges_per_second_max() const;
+  int badge_min_px() const;
+  int badge_max_px() const;
+  bool fullscreen_pause() const;
+  const std::vector<std::string> &exclude_processes() const;
+  bool ignore_injected() const;
+  const std::string &audio_backend() const;
+  const std::string &badge_spawn_strategy() const;
   int volume_percent() const;
+  const std::string &dpi_scaling_mode() const;
+  const std::string &logging_level() const;
 
 private:
   void load();
