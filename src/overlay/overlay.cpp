@@ -17,6 +17,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#ifdef __APPLE__
+#include <objc/message.h>
+#endif
+
 #include "embedded.h"
 #include <nlohmann/json.hpp>
 
@@ -313,9 +317,42 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
 
 void Overlay::shutdown() {
   stop();
+#ifdef _WIN32
+  if (m_window.device && m_window.glContext) {
+    wglMakeCurrent((HDC)m_window.device, (HGLRC)m_window.glContext);
+  }
+#elif defined(__linux__)
+  if (m_window.native && m_window.glContext) {
+    Display *dpy = glXGetCurrentDisplay();
+    if (dpy) {
+      glXMakeCurrent(dpy, (GLXDrawable)m_window.native, (GLXContext)m_window.glContext);
+    }
+  }
+#elif defined(__APPLE__)
+  if (m_window.glContext) {
+    auto makeCurrent = reinterpret_cast<void (*)(id, SEL)>(objc_msgSend);
+    makeCurrent((id)m_window.glContext, sel_getUid("makeCurrentContext"));
+  }
+#endif
   if (m_texture) {
     glDeleteTextures(1, &m_texture);
     m_texture = 0;
+  }
+  if (m_vbo) {
+    glDeleteBuffers(1, &m_vbo);
+    m_vbo = 0;
+  }
+  if (m_instance) {
+    glDeleteBuffers(1, &m_instance);
+    m_instance = 0;
+  }
+  if (m_vao) {
+    glDeleteVertexArrays(1, &m_vao);
+    m_vao = 0;
+  }
+  if (m_program) {
+    glDeleteProgram(m_program);
+    m_program = 0;
   }
   platform::destroy_window(m_window);
 }
