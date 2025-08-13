@@ -1,5 +1,6 @@
 #include "config.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 
@@ -83,17 +84,40 @@ void Config::load() {
 
     enabled_ = j.value("enabled", true);
     mute_ = j.value("mute", false);
-    sound_cooldown_ms_ = j.value("sound_cooldown_ms", 150);
-    max_concurrent_playbacks_ = j.value("max_concurrent_playbacks", 4);
-    badges_per_second_max_ = j.value("badges_per_second_max", 12);
-    badge_min_px_ = j.value("badge_min_px", 60);
-    badge_max_px_ = j.value("badge_max_px", 108);
+
+    auto clamp_nonneg = [](int value, const char *name) {
+      if (value < 0) {
+        spdlog::warn("{} negative ({}); clamping to 0", name, value);
+        return 0;
+      }
+      return value;
+    };
+
+    sound_cooldown_ms_ = clamp_nonneg(j.value("sound_cooldown_ms", 150), "sound_cooldown_ms");
+    max_concurrent_playbacks_ =
+        clamp_nonneg(j.value("max_concurrent_playbacks", 4), "max_concurrent_playbacks");
+    badges_per_second_max_ =
+        clamp_nonneg(j.value("badges_per_second_max", 12), "badges_per_second_max");
+    badge_min_px_ = clamp_nonneg(j.value("badge_min_px", 60), "badge_min_px");
+    badge_max_px_ = clamp_nonneg(j.value("badge_max_px", 108), "badge_max_px");
+    if (badge_max_px_ < badge_min_px_) {
+      spdlog::warn("badge_max_px ({}) less than badge_min_px ({}); clamping to {}", badge_max_px_,
+                   badge_min_px_, badge_min_px_);
+      badge_max_px_ = badge_min_px_;
+    }
     fullscreen_pause_ = j.value("fullscreen_pause", true);
     exclude_processes_ = j.value("exclude_processes", std::vector<std::string>{});
     ignore_injected_ = j.value("ignore_injected", true);
     audio_backend_ = j.value("audio_backend", std::string("miniaudio"));
     badge_spawn_strategy_ = j.value("badge_spawn_strategy", std::string("random_screen"));
-    volume_percent_ = j.value("volume_percent", 65);
+
+    int volume_in = j.value("volume_percent", 65);
+    int volume_clamped = std::clamp(volume_in, 0, 100);
+    if (volume_clamped != volume_in) {
+      spdlog::warn("volume_percent ({}) out of range; clamping to {}", volume_in, volume_clamped);
+    }
+    volume_percent_ = volume_clamped;
+
     dpi_scaling_mode_ = j.value("dpi_scaling_mode", std::string("per_monitor_v2"));
     logging_level_ = j.value("logging_level", std::string("info"));
 
