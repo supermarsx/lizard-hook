@@ -42,7 +42,8 @@ public:
   bool init(std::optional<std::filesystem::path> emoji_path = std::nullopt);
   void shutdown();
   void spawn_badge(int sprite, float x, float y);
-  void run();
+  void run(std::stop_token st);
+  void stop();
 
 private:
   void update(float dt);
@@ -199,6 +200,7 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
 }
 
 void Overlay::shutdown() {
+  stop();
   if (m_texture) {
     glDeleteTextures(1, &m_texture);
     m_texture = 0;
@@ -217,6 +219,8 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   b.sprite = sprite;
   m_badges.push_back(b);
 }
+
+void Overlay::stop() { m_running = false; }
 
 void Overlay::update(float dt) {
   for (auto &b : m_badges) {
@@ -261,11 +265,11 @@ void Overlay::render() {
   platform::poll_events(m_window);
 }
 
-void Overlay::run() {
+void Overlay::run(std::stop_token st) {
   using clock = std::chrono::steady_clock;
   const auto frame = std::chrono::milliseconds(16);
   auto last = clock::now();
-  while (m_running) {
+  while (m_running && !st.stop_requested()) {
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
@@ -277,6 +281,7 @@ void Overlay::run() {
       std::this_thread::sleep_for(frame - spend);
     }
   }
+  stop();
 }
 
 } // namespace lizard::overlay
