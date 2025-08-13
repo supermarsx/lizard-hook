@@ -1,6 +1,6 @@
+#include "engine.h"
+
 #include <algorithm>
-#include <chrono>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -68,107 +68,133 @@ std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t 
 }
 } // namespace
 
-class Engine {
-public:
-  Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
-      : m_maxPlaybacks(maxPlaybacks), m_cooldown(cooldown) {}
+Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
+    : m_maxPlaybacks(maxPlaybacks), m_cooldown(cooldown) {}
 
-  ~Engine() { shutdown(); }
+Engine::~Engine() { shutdown(); }
 
-  bool init(std::optional<std::filesystem::path> sound_path = std::nullopt,
-            int config_volume_percent = 100) {
-    ma_result result = ma_engine_init(nullptr, &m_engine);
-    if (result != MA_SUCCESS) {
-      spdlog::error("ma_engine_init failed: {}", result);
-      return false;
-    }
+bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_percent,
+                  std::string_view backend) {
+  ma_engine_config engineConfig = ma_engine_config_init();
 
-    std::optional<DecodedSample> decoded;
-    if (sound_path && std::filesystem::exists(*sound_path)) {
-      decoded = load_flac_file(sound_path->string());
-    } else {
-      decoded = load_flac_memory(lizard::assets::lizard_processed_clean_no_meta_flac,
-                                 lizard::assets::lizard_processed_clean_no_meta_flac_len);
-    }
-    if (!decoded) {
-      spdlog::error("Failed to decode audio sample");
-      ma_engine_uninit(&m_engine);
-      return false;
-    }
-
-    m_bufferConfig = ma_audio_buffer_config_init(ma_format_f32, decoded->channels, decoded->frames,
-                                                 decoded->pcm.data(), nullptr);
-    result = ma_audio_buffer_init(&m_bufferConfig, &m_buffer);
-    if (result != MA_SUCCESS) {
-      spdlog::error("ma_audio_buffer_init failed: {}", result);
-      ma_engine_uninit(&m_engine);
-      return false;
-    }
-
-    m_voices.resize(m_maxPlaybacks);
-    for (auto &voice : m_voices) {
-      ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
-    }
-    set_volume(static_cast<float>(config_volume_percent) / 100.0f);
-    return true;
+  ma_backend maBackend{};
+  bool useBackend = true;
+  if (backend == "wasapi") {
+    maBackend = ma_backend_wasapi;
+  } else if (backend == "coreaudio") {
+    maBackend = ma_backend_coreaudio;
+  } else if (backend == "alsa") {
+    maBackend = ma_backend_alsa;
+  } else {
+    useBackend = false;
   }
 
-  void shutdown() {
-    for (auto &voice : m_voices) {
-      ma_sound_uninit(&voice.sound);
+  ma_result result = MA_SUCCESS;
+  if (useBackend) {
+    ma_context_config contextConfig = ma_context_config_init();
+    const ma_backend backends[] = {maBackend};
+    result = ma_context_init(backends, 1, &contextConfig, &m_context);
+    if (result != MA_SUCCESS) {
+      spdlog::error("ma_context_init failed: {}", result);
+      return false;
     }
-    m_voices.clear();
-    ma_audio_buffer_uninit(&m_buffer);
+    m_contextInitialized = true;
+    engineConfig.pContext = &m_context;
+  }
+
+  result = ma_engine_init(&engineConfig, &m_engine);
+  if (result != MA_SUCCESS) {
+    spdlog::error("ma_engine_init failed: {}", result);
+    if (m_contextInitialized) {
+      ma_context_uninit(&m_context);
+      m_contextInitialized = false;
+    }
+    return false;
+  }
+
+  std::optional<DecodedSample> decoded;
+  if (sound_path && std::filesystem::exists(*sound_path)) {
+    decoded = load_flac_file(sound_path->string());
+  } else {
+    decoded = load_flac_memory(lizard::assets::lizard_processed_clean_no_meta_flac,
+                               lizard::assets::lizard_processed_clean_no_meta_flac_len);
+  }
+  if (!decoded) {
+    spdlog::error("Failed to decode audio sample");
     ma_engine_uninit(&m_engine);
+    if (m_contextInitialized) {
+      ma_context_uninit(&m_context);
+      m_contextInitialized = false;
+    }
+    return false;
   }
 
-  void play() {
-    auto now = std::chrono::steady_clock::now();
-    if ((now - m_lastPlay) < m_cooldown) {
-      return;
+  m_bufferConfig = ma_audio_buffer_config_init(ma_format_f32, decoded->channels, decoded->frames,
+                                               decoded->pcm.data(), nullptr);
+  result = ma_audio_buffer_init(&m_bufferConfig, &m_buffer);
+  if (result != MA_SUCCESS) {
+    spdlog::error("ma_audio_buffer_init failed: {}", result);
+    ma_engine_uninit(&m_engine);
+    if (m_contextInitialized) {
+      ma_context_uninit(&m_context);
+      m_contextInitialized = false;
     }
-    m_lastPlay = now;
-
-    Voice *target = nullptr;
-    for (auto &voice : m_voices) {
-      if (!ma_sound_is_playing(&voice.sound)) {
-        target = &voice;
-        break;
-      }
-    }
-
-    if (target == nullptr) {
-      target = &*std::min_element(m_voices.begin(), m_voices.end(),
-                                  [](const Voice &a, const Voice &b) { return a.start < b.start; });
-      ma_sound_stop(&target->sound);
-    }
-
-    ma_sound_seek_to_pcm_frame(&target->sound, 0);
-    ma_sound_start(&target->sound);
-    target->start = now;
+    return false;
   }
 
-  void set_volume(float vol) {
-    m_volume = std::clamp(vol, 0.0f, 1.0f);
-    for (auto &voice : m_voices) {
-      ma_sound_set_volume(&voice.sound, m_volume);
+  m_voices.resize(m_maxPlaybacks);
+  for (auto &voice : m_voices) {
+    ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
+  }
+  int clampedPercent = std::clamp(volume_percent, 0, 100);
+  set_volume(static_cast<float>(clampedPercent) / 100.0f);
+  return true;
+}
+
+void Engine::shutdown() {
+  for (auto &voice : m_voices) {
+    ma_sound_uninit(&voice.sound);
+  }
+  m_voices.clear();
+  ma_audio_buffer_uninit(&m_buffer);
+  ma_engine_uninit(&m_engine);
+  if (m_contextInitialized) {
+    ma_context_uninit(&m_context);
+    m_contextInitialized = false;
+  }
+}
+
+void Engine::play() {
+  auto now = std::chrono::steady_clock::now();
+  if ((now - m_lastPlay) < m_cooldown) {
+    return;
+  }
+  m_lastPlay = now;
+
+  Voice *target = nullptr;
+  for (auto &voice : m_voices) {
+    if (!ma_sound_is_playing(&voice.sound)) {
+      target = &voice;
+      break;
     }
   }
 
-private:
-  struct Voice {
-    ma_sound sound{};
-    std::chrono::steady_clock::time_point start{};
-  };
+  if (target == nullptr) {
+    target = &*std::min_element(m_voices.begin(), m_voices.end(),
+                                [](const Voice &a, const Voice &b) { return a.start < b.start; });
+    ma_sound_stop(&target->sound);
+  }
 
-  ma_engine m_engine{};
-  ma_audio_buffer_config m_bufferConfig{};
-  ma_audio_buffer m_buffer{};
-  std::vector<Voice> m_voices;
-  std::uint32_t m_maxPlaybacks = 0;
-  std::chrono::steady_clock::time_point m_lastPlay{};
-  std::chrono::milliseconds m_cooldown{};
-  float m_volume{1.0f};
-};
+  ma_sound_seek_to_pcm_frame(&target->sound, 0);
+  ma_sound_start(&target->sound);
+  target->start = now;
+}
+
+void Engine::set_volume(float vol) {
+  m_volume = std::clamp(vol, 0.0f, 1.0f);
+  for (auto &voice : m_voices) {
+    ma_sound_set_volume(&voice.sound, m_volume);
+  }
+}
 
 } // namespace lizard::audio

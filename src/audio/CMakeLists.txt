@@ -15,8 +15,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(miniaudio drflac)
 
 add_library(lizard_audio STATIC engine.cpp)
+target_sources(lizard_audio PUBLIC engine.h)
 
 target_include_directories(lizard_audio
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
   PRIVATE
     ${miniaudio_SOURCE_DIR}
     ${drflac_SOURCE_DIR}
