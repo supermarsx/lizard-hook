@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include "app/config.h"
+#include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 
@@ -224,13 +225,52 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   GLuint vsId = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(vsId, 1, &vs, nullptr);
   glCompileShader(vsId);
+  GLint compiled = GL_FALSE;
+  glGetShaderiv(vsId, GL_COMPILE_STATUS, &compiled);
+  if (compiled != GL_TRUE) {
+    GLint logLen = 0;
+    glGetShaderiv(vsId, GL_INFO_LOG_LENGTH, &logLen);
+    std::string log(logLen, '\0');
+    glGetShaderInfoLog(vsId, logLen, nullptr, log.data());
+    spdlog::error("Vertex shader compilation failed: {}", log);
+    glDeleteShader(vsId);
+    return false;
+  }
+
   GLuint fsId = glCreateShader(GL_FRAGMENT_SHADER);
   glShaderSource(fsId, 1, &fs, nullptr);
   glCompileShader(fsId);
+  glGetShaderiv(fsId, GL_COMPILE_STATUS, &compiled);
+  if (compiled != GL_TRUE) {
+    GLint logLen = 0;
+    glGetShaderiv(fsId, GL_INFO_LOG_LENGTH, &logLen);
+    std::string log(logLen, '\0');
+    glGetShaderInfoLog(fsId, logLen, nullptr, log.data());
+    spdlog::error("Fragment shader compilation failed: {}", log);
+    glDeleteShader(vsId);
+    glDeleteShader(fsId);
+    return false;
+  }
+
   m_program = glCreateProgram();
   glAttachShader(m_program, vsId);
   glAttachShader(m_program, fsId);
   glLinkProgram(m_program);
+  GLint linked = GL_FALSE;
+  glGetProgramiv(m_program, GL_LINK_STATUS, &linked);
+  if (linked != GL_TRUE) {
+    GLint logLen = 0;
+    glGetProgramiv(m_program, GL_INFO_LOG_LENGTH, &logLen);
+    std::string log(logLen, '\0');
+    glGetProgramInfoLog(m_program, logLen, nullptr, log.data());
+    spdlog::error("Program link failed: {}", log);
+    glDeleteShader(vsId);
+    glDeleteShader(fsId);
+    glDeleteProgram(m_program);
+    m_program = 0;
+    return false;
+  }
+
   glDeleteShader(vsId);
   glDeleteShader(fsId);
 
