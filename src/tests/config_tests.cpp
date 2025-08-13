@@ -5,6 +5,7 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <spdlog/sinks/memory_sink.h>
 
 using lizard::app::Config;
 
@@ -103,6 +104,41 @@ TEST_CASE("enforces badge size ordering", "[config]") {
   REQUIRE(cfg.badge_min_px() == 120);
   REQUIRE(cfg.badge_max_px() == 120);
   REQUIRE(cfg.volume_percent() == 100);
+
+  std::filesystem::remove(cfg_file);
+}
+
+TEST_CASE("logs warnings for adjusted values", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_warn.json";
+  std::ofstream out(cfg_file);
+  out << R"({"sound_cooldown_ms":-5,"badge_min_px":-2,"badge_max_px":-1,"volume_percent":150})";
+  out.close();
+
+  auto sink = std::make_shared<spdlog::sinks::memory_sink_mt>();
+  auto logger = std::make_shared<spdlog::logger>("test", sink);
+  spdlog::set_default_logger(logger);
+
+  Config cfg(tempdir, cfg_file);
+
+  bool saw_sound = false;
+  bool saw_badge_min = false;
+  bool saw_badge_max = false;
+  bool saw_volume = false;
+  for (const auto &line : sink->lines()) {
+    if (line.find("sound_cooldown_ms") != std::string::npos)
+      saw_sound = true;
+    if (line.find("badge_min_px") != std::string::npos)
+      saw_badge_min = true;
+    if (line.find("badge_max_px") != std::string::npos)
+      saw_badge_max = true;
+    if (line.find("volume_percent") != std::string::npos)
+      saw_volume = true;
+  }
+  REQUIRE(saw_sound);
+  REQUIRE(saw_badge_min);
+  REQUIRE(saw_badge_max);
+  REQUIRE(saw_volume);
 
   std::filesystem::remove(cfg_file);
 }
