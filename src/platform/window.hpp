@@ -5,6 +5,8 @@
 #include <windows.h>
 #elif defined(__linux__)
 #include <GL/glx.h>
+#elif defined(__APPLE__)
+class NSOpenGLContext;
 #endif
 
 namespace lizard::platform {
@@ -23,6 +25,8 @@ struct Window {
   HDC device = nullptr;
 #elif defined(__linux__)
   GLXContext glContext = nullptr;
+#elif defined(__APPLE__)
+  NSOpenGLContext *glContext = nullptr;
 #endif
 };
 
