@@ -52,13 +52,27 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# spdlog (fetched)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.12.0
+)
+FetchContent_GetProperties(spdlog)
+if(NOT spdlog_POPULATED)
+  FetchContent_Populate(spdlog)
+endif()
+add_library(spdlog INTERFACE)
+target_include_directories(spdlog INTERFACE ${spdlog_SOURCE_DIR}/include)
+add_library(spdlog::spdlog ALIAS spdlog)
+
 add_subdirectory(assets)
+add_subdirectory(src/util)
 add_subdirectory(src/app)
 add_subdirectory(src/hook)
 add_subdirectory(src/audio)
 add_subdirectory(src/platform)
 add_subdirectory(src/overlay)
-add_subdirectory(src/util)
 
 include(CTest)
 if(BUILD_TESTING)

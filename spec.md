@@ -27,7 +27,7 @@ Zero disruption to user input or focus. Lightweight, no installer required.
   Alternative: **Direct3D11 + Direct2D interop** if we need GPU composition (flag).
 * **Emoji font**: prefer **Segoe UI Emoji**; fallback to default system emoji-capable font.
 
-All third-party libs vendored in `third_party/` as source (no dynamic DLLs). Static link where possible.
+Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs). `spdlog` is fetched via CMake at configure time. Static link where possible.
 
 ## 4) High-Level Architecture
 
