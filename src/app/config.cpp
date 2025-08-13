@@ -137,4 +137,6 @@ const std::optional<std::filesystem::path> &Config::emoji_path() const { return 
 
 const std::string &Config::logging_level() const { return logging_level_; }
 
+int Config::volume_percent() const { return volume_percent_; }
+
 } // namespace lizard::app

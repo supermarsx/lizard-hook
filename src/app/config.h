@@ -22,6 +22,7 @@ public:
   const std::optional<std::filesystem::path> &sound_path() const;
   const std::optional<std::filesystem::path> &emoji_path() const;
   const std::string &logging_level() const;
+  int volume_percent() const;
 
 private:
   void load();

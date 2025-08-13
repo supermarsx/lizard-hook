@@ -75,7 +75,8 @@ public:
 
   ~Engine() { shutdown(); }
 
-  bool init(std::optional<std::filesystem::path> sound_path = std::nullopt) {
+  bool init(std::optional<std::filesystem::path> sound_path = std::nullopt,
+            int config_volume_percent = 100) {
     ma_result result = ma_engine_init(nullptr, &m_engine);
     if (result != MA_SUCCESS) {
       spdlog::error("ma_engine_init failed: {}", result);
@@ -108,6 +109,7 @@ public:
     for (auto &voice : m_voices) {
       ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
     }
+    set_volume(static_cast<float>(config_volume_percent) / 100.0f);
     return true;
   }
 
@@ -146,6 +148,13 @@ public:
     target->start = now;
   }
 
+  void set_volume(float vol) {
+    m_volume = std::clamp(vol, 0.0f, 1.0f);
+    for (auto &voice : m_voices) {
+      ma_sound_set_volume(&voice.sound, m_volume);
+    }
+  }
+
 private:
   struct Voice {
     ma_sound sound{};
@@ -159,6 +168,7 @@ private:
   std::uint32_t m_maxPlaybacks = 0;
   std::chrono::steady_clock::time_point m_lastPlay{};
   std::chrono::milliseconds m_cooldown{};
+  float m_volume{1.0f};
 };
 
 } // namespace lizard::audio

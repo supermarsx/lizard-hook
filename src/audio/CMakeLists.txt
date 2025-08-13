@@ -47,3 +47,5 @@ elif(AUDIO_BACKEND STREQUAL "ALSA")
   target_link_libraries(lizard_audio PRIVATE asound)
 endif()
 
+add_warning_flags(lizard_audio)
+
