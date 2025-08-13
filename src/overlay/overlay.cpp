@@ -3,12 +3,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <thread>
 #include <vector>
 
 #include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#include "embedded.h"
 
 namespace lizard::overlay {
 
@@ -31,7 +35,7 @@ struct Badge {
 
 class Overlay {
 public:
-  bool init();
+  bool init(std::optional<std::filesystem::path> emoji_path = std::nullopt);
   void shutdown();
   void spawn_badge(int sprite, float x, float y);
   void run();
@@ -51,16 +55,7 @@ private:
   bool m_running = false;
 };
 
-// Embedded 1x1 PNG placeholder
-static const unsigned char atlas_png[] = {
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x04, 0x00, 0x00, 0x00, 0xb5, 0x1c, 0x0c, 0x02, 0x00, 0x00, 0x00,
-    0x0b, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
-    0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
-
-bool Overlay::init() {
+bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
   platform::WindowDesc desc{800, 600};
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
@@ -69,15 +64,28 @@ bool Overlay::init() {
 
   // Load atlas
   int w, h, channels;
-  unsigned char *pixels =
-      stbi_load_from_memory(atlas_png, sizeof(atlas_png), &w, &h, &channels, 4);
+  unsigned char *pixels = nullptr;
+  if (emoji_path && std::filesystem::exists(*emoji_path)) {
+    pixels = stbi_load(emoji_path->string().c_str(), &w, &h, &channels, 4);
+  } else {
+    pixels = stbi_load_from_memory(lizard::assets::lizard_regular_png,
+                                   lizard::assets::lizard_regular_png_len, &w, &h, &channels, 4);
+  }
   if (!pixels) {
     return false;
   }
+
+  // Pre-multiply RGB by alpha
+  for (int i = 0; i < w * h; ++i) {
+    unsigned char *p = pixels + i * 4;
+    unsigned char a = p[3];
+    p[0] = static_cast<unsigned char>(p[0] * a / 255);
+    p[1] = static_cast<unsigned char>(p[1] * a / 255);
+    p[2] = static_cast<unsigned char>(p[2] * a / 255);
+  }
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-               pixels);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   stbi_image_free(pixels);
@@ -97,24 +105,23 @@ bool Overlay::init() {
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
 
   glGenBuffers(1, &m_instance);
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
-  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 6, nullptr,
-               GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 7, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)0);
   glVertexAttribDivisor(2, 1);
   glEnableVertexAttribArray(3);
-  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(2 * sizeof(float)));
   glVertexAttribDivisor(3, 1);
   glEnableVertexAttribArray(4);
-  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                        (void *)(4 * sizeof(float)));
+  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(4 * sizeof(float)));
   glVertexAttribDivisor(4, 1);
+  glEnableVertexAttribArray(5);
+  glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(5 * sizeof(float)));
+  glVertexAttribDivisor(5, 1);
 
   const char *vs = R"GLSL(
       #version 330 core
@@ -122,21 +129,24 @@ bool Overlay::init() {
       layout(location=1) in vec2 inUV;
       layout(location=2) in vec2 iPos;
       layout(location=3) in vec2 iScale;
-      layout(location=4) in vec2 iUV;
+      layout(location=4) in float iAlpha;
+      layout(location=5) in vec2 iUV;
       out vec2 uv;
+      out float alpha;
       void main(){
         vec2 pos = inPos * iScale + iPos;
         gl_Position = vec4(pos,0.0,1.0);
         uv = inUV * iUV;
+        alpha = iAlpha;
       })GLSL";
   const char *fs = R"GLSL(
       #version 330 core
       in vec2 uv;
+      in float alpha;
       out vec4 color;
       uniform sampler2D uTex;
-      uniform float uAlpha;
       void main(){
-        color = texture(uTex, uv) * uAlpha;
+        color = texture(uTex, uv) * alpha;
       })GLSL";
   GLuint vsId = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(vsId, 1, &vs, nullptr);
@@ -182,15 +192,17 @@ void Overlay::update(float dt) {
     b.alpha = 1.0f - t;
     b.scale = 0.1f + 0.1f * t;
   }
-  m_badges.erase(
-      std::remove_if(m_badges.begin(), m_badges.end(),
-                     [](const Badge &b) { return b.time >= b.lifetime; }),
-      m_badges.end());
+  m_badges.erase(std::remove_if(m_badges.begin(), m_badges.end(),
+                                [](const Badge &b) { return b.time >= b.lifetime; }),
+                 m_badges.end());
 }
 
 void Overlay::render() {
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   std::vector<float> data;
   for (const auto &b : m_badges) {
@@ -199,6 +211,7 @@ void Overlay::render() {
     data.push_back(b.y);
     data.push_back(b.scale);
     data.push_back(b.scale);
+    data.push_back(b.alpha);
     data.push_back(s.u1 - s.u0);
     data.push_back(s.v1 - s.v0);
   }
@@ -208,10 +221,7 @@ void Overlay::render() {
   glUseProgram(m_program);
   glBindVertexArray(m_vao);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  for (const auto &b : m_badges) {
-    glUniform1f(glGetUniformLocation(m_program, "uAlpha"), b.alpha);
-    glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, 1);
-  }
+  glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(m_badges.size()));
   platform::poll_events(m_window);
 }
 

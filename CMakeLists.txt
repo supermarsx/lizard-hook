@@ -6,6 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+function(add_warning_flags target)
+  target_compile_options(${target} PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+  )
+endfunction()
+
 include(FetchContent)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -52,6 +59,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+add_subdirectory(assets)
 add_subdirectory(src/app)
 add_subdirectory(src/hook)
 add_subdirectory(src/audio)
@@ -70,9 +78,18 @@ if(BUILD_TESTING)
   add_subdirectory(src/tests)
 endif()
 
-file(GLOB_RECURSE ALL_CXX_SOURCE_FILES CONFIGURE_DEPENDS src/tests/*.cpp src/tests/*.h)
-file(GLOB_RECURSE ALL_CXX_SOURCE_CPP CONFIGURE_DEPENDS src/tests/*.cpp)
+file(GLOB_RECURSE ALL_CXX_SOURCE_FILES CONFIGURE_DEPENDS
+  src/*.cpp
+  src/*.hpp
+  src/*.h
+)
+file(GLOB_RECURSE ALL_CXX_SOURCE_CPP CONFIGURE_DEPENDS src/*.cpp)
+
+add_custom_target(format
+  COMMAND clang-format -i ${ALL_CXX_SOURCE_FILES}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_custom_target(lint
-  COMMAND clang-format --dry-run ${ALL_CXX_SOURCE_FILES}
+  COMMAND clang-format --dry-run --Werror ${ALL_CXX_SOURCE_FILES}
   COMMAND clang-tidy ${ALL_CXX_SOURCE_CPP} -p ${CMAKE_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

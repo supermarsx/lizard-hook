@@ -1,16 +1,61 @@
 {
+  // Enable or disable the overlay entirely (default: true)
   "enabled": true,
+
+  // Mute all audio output (default: false)
   "mute": false,
+
+  // Minimum milliseconds between sound plays (default: 150)
   "sound_cooldown_ms": 150,
-  "max_concurrent_playbacks": 16,
+
+  // Maximum simultaneous sound playbacks (default: 4)
+  "max_concurrent_playbacks": 4,
+
+  // Limit on badge spawns per second (default: 12)
   "badges_per_second_max": 12,
+
+  // Minimum badge size in pixels (default: 60)
   "badge_min_px": 60,
+
+  // Maximum badge size in pixels (default: 108)
   "badge_max_px": 108,
-  "emoji": ["🦎"],
+
+  // Pause when a fullscreen window is detected (default: true)
   "fullscreen_pause": true,
+
+  // Processes to exclude from triggering badges or sounds (match executable name, no extension)
   "exclude_processes": [],
+
+  // Ignore injected or synthetic key events (default: true)
   "ignore_injected": true,
+
+  // Path to external sound file; empty string uses embedded asset
+  "sound_path": "",
+
+  // Path to external emoji atlas image; empty string uses embedded asset
+  "emoji_path": "",
+
+  // Audio backend selection (default: "miniaudio")
   "audio_backend": "miniaudio",
-  "fps_mode": "auto",
-  "fps_fixed": 60
+
+  // Strategy for placing badges ("random_screen" or other future strategies)
+  "badge_spawn_strategy": "random_screen",
+
+  // Output volume as a percentage (0-100, default: 65)
+  "volume_percent": 65,
+
+  // DPI scaling mode (e.g., "per_monitor_v2", default: "per_monitor_v2")
+  "dpi_scaling_mode": "per_monitor_v2",
+
+  // Logging verbosity ("trace", "debug", "info", "warn", "error", default: "info")
+  "logging_level": "info",
+
+  // Simple emoji list. Only used if `emoji_weighted` is absent.
+  "emoji": ["🦎"],
+
+  // Weighted emoji selection. If present, overrides `emoji`.
+  // "emoji_weighted": {
+  //   "🦎": 0.7,
+  //   "🐊": 0.3
+  // }
 }

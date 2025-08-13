@@ -1,3 +1,5 @@
-Checks: '-*,bugprone-*,modernize-*,readability-*'
+Checks: >
+  bugprone-*,performance-*,readability-*,modernize-*,clang-analyzer-*
+WarningsAsErrors: ''
 HeaderFilterRegex: 'src/.*'
-FormatStyle: none
+FormatStyle: file

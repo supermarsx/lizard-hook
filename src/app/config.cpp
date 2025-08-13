@@ -47,25 +47,24 @@ Config::~Config() { watcher_.request_stop(); }
 
 std::filesystem::path Config::user_config_path() {
 #ifdef _WIN32
-    if (auto *local = std::getenv("LOCALAPPDATA")) {
-      return std::filesystem::path(local) / "LizardHook" / "lizard.json";
-    }
-#elif __APPLE__
-    if (auto *home = std::getenv("HOME")) {
-      return std::filesystem::path(home) / "Library" / "Application Support" /
-             "LizardHook" / "lizard.json";
-    }
-#else
-    if (auto *xdg = std::getenv("XDG_CONFIG_HOME")) {
-      return std::filesystem::path(xdg) / "lizard_hook" / "lizard.json";
-    }
-    if (auto *home = std::getenv("HOME")) {
-      return std::filesystem::path(home) / ".config" / "lizard_hook" /
-             "lizard.json";
-    }
-#endif
-    return {};
+  if (auto *local = std::getenv("LOCALAPPDATA")) {
+    return std::filesystem::path(local) / "LizardHook" / "lizard.json";
   }
+#elif __APPLE__
+  if (auto *home = std::getenv("HOME")) {
+    return std::filesystem::path(home) / "Library" / "Application Support" / "LizardHook" /
+           "lizard.json";
+  }
+#else
+  if (auto *xdg = std::getenv("XDG_CONFIG_HOME")) {
+    return std::filesystem::path(xdg) / "lizard_hook" / "lizard.json";
+  }
+  if (auto *home = std::getenv("HOME")) {
+    return std::filesystem::path(home) / ".config" / "lizard_hook" / "lizard.json";
+  }
+#endif
+  return {};
+}
 
 void Config::load() {
   std::ifstream in(config_path_);
@@ -85,16 +84,20 @@ void Config::load() {
     badge_min_px_ = j.value("badge_min_px", 60);
     badge_max_px_ = j.value("badge_max_px", 108);
     fullscreen_pause_ = j.value("fullscreen_pause", true);
-    exclude_processes_ =
-        j.value("exclude_processes", std::vector<std::string>{});
+    exclude_processes_ = j.value("exclude_processes", std::vector<std::string>{});
     ignore_injected_ = j.value("ignore_injected", true);
     audio_backend_ = j.value("audio_backend", std::string("miniaudio"));
-    badge_spawn_strategy_ =
-        j.value("badge_spawn_strategy", std::string("random_screen"));
+    badge_spawn_strategy_ = j.value("badge_spawn_strategy", std::string("random_screen"));
     volume_percent_ = j.value("volume_percent", 65);
-    dpi_scaling_mode_ =
-        j.value("dpi_scaling_mode", std::string("per_monitor_v2"));
+    dpi_scaling_mode_ = j.value("dpi_scaling_mode", std::string("per_monitor_v2"));
     logging_level_ = j.value("logging_level", std::string("info"));
+
+    if (j.contains("sound_path")) {
+      sound_path_ = j.at("sound_path").get<std::string>();
+    }
+    if (j.contains("emoji_path")) {
+      emoji_path_ = j.at("emoji_path").get<std::string>();
+    }
 
     if (j.contains("emoji_weighted")) {
       emoji_weighted_.clear();
@@ -120,5 +123,11 @@ const std::vector<std::string> &Config::emoji() const { return emoji_; }
 const std::unordered_map<std::string, double> &Config::emoji_weighted() const {
   return emoji_weighted_;
 }
+
+const std::optional<std::filesystem::path> &Config::sound_path() const { return sound_path_; }
+
+const std::optional<std::filesystem::path> &Config::emoji_path() const { return emoji_path_; }
+
+int Config::volume_percent() const { return volume_percent_; }
 
 } // namespace lizard::app

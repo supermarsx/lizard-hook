@@ -19,6 +19,9 @@ public:
   bool mute() const;
   const std::vector<std::string> &emoji() const;
   const std::unordered_map<std::string, double> &emoji_weighted() const;
+  const std::optional<std::filesystem::path> &sound_path() const;
+  const std::optional<std::filesystem::path> &emoji_path() const;
+  int volume_percent() const;
 
 private:
   void load();
@@ -38,6 +41,8 @@ private:
   int badge_max_px_{108};
   std::vector<std::string> emoji_{"\U0001F98E"};
   std::unordered_map<std::string, double> emoji_weighted_{};
+  std::optional<std::filesystem::path> sound_path_{};
+  std::optional<std::filesystem::path> emoji_path_{};
   bool fullscreen_pause_{true};
   std::vector<std::string> exclude_processes_{};
   bool ignore_injected_{true};
