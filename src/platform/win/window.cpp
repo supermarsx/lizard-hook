@@ -30,11 +30,10 @@ Window create_overlay_window(const WindowDesc &desc) {
   wc.lpszClassName = L"LizardOverlay";
   RegisterClassW(&wc);
 
-  DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
-                  WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-  g_hwnd =
-      CreateWindowExW(exStyle, wc.lpszClassName, L"", WS_POPUP, 0, 0,
-                      desc.width, desc.height, nullptr, nullptr, inst, nullptr);
+  DWORD exStyle =
+      WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+  g_hwnd = CreateWindowExW(exStyle, wc.lpszClassName, L"", WS_POPUP, 0, 0, desc.width, desc.height,
+                           nullptr, nullptr, inst, nullptr);
   if (!g_hwnd) {
     return result;
   }
@@ -57,11 +56,22 @@ Window create_overlay_window(const WindowDesc &desc) {
 
   result.native = g_hwnd;
   result.dpiScale = compute_dpi(g_hwnd);
+  result.glContext = rc;
+  result.device = dc;
   return result;
 }
 
 void destroy_window(Window &window) {
   if (window.native) {
+    wglMakeCurrent(nullptr, nullptr);
+    if (window.glContext) {
+      wglDeleteContext(window.glContext);
+      window.glContext = nullptr;
+    }
+    if (window.device) {
+      ReleaseDC((HWND)window.native, window.device);
+      window.device = nullptr;
+    }
     DestroyWindow((HWND)window.native);
   }
   window.native = nullptr;
