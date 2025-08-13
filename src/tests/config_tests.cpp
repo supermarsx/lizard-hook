@@ -3,6 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <chrono>
+#include <thread>
 
 using lizard::app::Config;
 
@@ -42,6 +44,30 @@ TEST_CASE("parses asset paths", "[config]") {
   Config cfg(tempdir, cfg_file);
   REQUIRE(cfg.sound_path().has_value());
   REQUIRE(cfg.emoji_path().has_value());
+
+  std::filesystem::remove(cfg_file);
+}
+
+TEST_CASE("reloads on file change", "[config]") {
+  using namespace std::chrono_literals;
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_reload.json";
+  {
+    std::ofstream out(cfg_file);
+    out << R"({"enabled":false})";
+  }
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE_FALSE(cfg.enabled());
+
+  std::this_thread::sleep_for(1s);
+  {
+    std::ofstream out(cfg_file);
+    out << R"({"enabled":true})";
+  }
+
+  std::this_thread::sleep_for(2s);
+  REQUIRE(cfg.enabled());
 
   std::filesystem::remove(cfg_file);
 }
