@@ -8,7 +8,11 @@
 #include <X11/extensions/XInput2.h>
 #include <X11/extensions/record.h>
 
+#include <cerrno>
+#include <future>
 #include <thread>
+
+#include <spdlog/spdlog.h>
 
 namespace hook {
 
@@ -23,9 +27,16 @@ public:
     if (running_) {
       return false;
     }
-    running_ = true;
-    thread_ = std::jthread([this](std::stop_token st) { run(st); });
-    return true;
+    std::promise<bool> ready;
+    auto fut = ready.get_future();
+    thread_ = std::jthread(
+        [this, p = std::move(ready)](std::stop_token st) mutable { run(st, std::move(p)); });
+    bool ok = fut.get();
+    running_ = ok;
+    if (!ok && thread_.joinable()) {
+      thread_.join();
+    }
+    return ok;
   }
 
   void stop() override {
@@ -40,9 +51,11 @@ public:
   }
 
 private:
-  void run(std::stop_token st) {
+  void run(std::stop_token st, std::promise<bool> started) {
     Display *dpy = XOpenDisplay(nullptr);
     if (!dpy) {
+      spdlog::error("XOpenDisplay failed: {}", errno);
+      started.set_value(false);
       return;
     }
     int xi_opcode = 0, event, error;
@@ -55,14 +68,13 @@ private:
       XISetMask(m, XI_RawKeyPress);
       XISetMask(m, XI_RawKeyRelease);
       XISelectEvents(dpy, DefaultRootWindow(dpy), &mask, 1);
+      started.set_value(true);
       XEvent ev;
       while (!st.stop_requested()) {
         XNextEvent(dpy, &ev);
-        if (ev.xcookie.type == GenericEvent &&
-            ev.xcookie.extension == xi_opcode &&
+        if (ev.xcookie.type == GenericEvent && ev.xcookie.extension == xi_opcode &&
             XGetEventData(dpy, &ev.xcookie)) {
-          if (ev.xcookie.evtype == XI_RawKeyPress ||
-              ev.xcookie.evtype == XI_RawKeyRelease) {
+          if (ev.xcookie.evtype == XI_RawKeyPress || ev.xcookie.evtype == XI_RawKeyRelease) {
             auto *raw = static_cast<XIRawEvent *>(ev.xcookie.data);
             bool pressed = ev.xcookie.evtype == XI_RawKeyPress;
             callback_(raw->detail, pressed);
@@ -75,6 +87,12 @@ private:
       int major, minor;
       if (XRecordQueryVersion(dpy, &major, &minor)) {
         Display *data_dpy = XOpenDisplay(nullptr);
+        if (!data_dpy) {
+          spdlog::error("XOpenDisplay failed: {}", errno);
+          started.set_value(false);
+          XCloseDisplay(dpy);
+          return;
+        }
         XRecordRange *range = XRecordAllocRange();
         range->device_events.first = KeyPress;
         range->device_events.last = KeyRelease;
@@ -89,10 +107,20 @@ private:
           }
           XRecordFreeData(data);
         };
-        XRecordContext rec =
-            XRecordCreateContext(dpy, 0, &clients, 1, &range, 1);
-        XRecordEnableContextAsync(data_dpy, rec, handler,
-                                  reinterpret_cast<XPointer>(this));
+        XRecordContext rec = XRecordCreateContext(dpy, 0, &clients, 1, &range, 1);
+        if (!rec ||
+            !XRecordEnableContextAsync(data_dpy, rec, handler, reinterpret_cast<XPointer>(this))) {
+          spdlog::error("XRecord setup failed");
+          started.set_value(false);
+          if (rec) {
+            XRecordFreeContext(dpy, rec);
+          }
+          XCloseDisplay(data_dpy);
+          XFree(range);
+          XCloseDisplay(dpy);
+          return;
+        }
+        started.set_value(true);
         while (!st.stop_requested()) {
           XRecordProcessReplies(data_dpy);
         }
@@ -100,6 +128,9 @@ private:
         XRecordFreeContext(dpy, rec);
         XCloseDisplay(data_dpy);
         XFree(range);
+      } else {
+        spdlog::error("XInput2/XRecord unavailable");
+        started.set_value(false);
       }
     }
     XCloseDisplay(dpy);

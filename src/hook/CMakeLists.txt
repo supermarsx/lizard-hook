@@ -2,6 +2,7 @@ add_library(lizard_hook STATIC)
 
 # Allow includes like <hook/keyboard_hook.h>
 target_include_directories(lizard_hook PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(lizard_hook PUBLIC spdlog::spdlog)
 
 if (WIN32)
   target_sources(lizard_hook PRIVATE windows/keyboard_hook.cpp)
