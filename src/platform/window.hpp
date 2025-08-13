@@ -12,6 +12,7 @@ namespace lizard::platform {
 struct WindowDesc {
   std::uint32_t width;
   std::uint32_t height;
+  // On Windows the overlay always spans the virtual screen, so these are ignored.
 };
 
 struct Window {

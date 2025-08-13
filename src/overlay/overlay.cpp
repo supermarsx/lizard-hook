@@ -72,7 +72,11 @@ private:
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
+#ifdef _WIN32
+  platform::WindowDesc desc{0, 0};
+#else
   platform::WindowDesc desc{800, 600};
+#endif
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
     return false;
