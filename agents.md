@@ -112,25 +112,17 @@
 
 ---
 
-## Third‑Party (vendored in `third_party/`)
+## Third-Party
 
 - `miniaudio` (audio backend abstraction)
-
 - `dr_flac` (FLAC decode)
-
 - `glad` (OpenGL loader, generated for 3.3 core)
-
 - `stb_image` (PNG)
-
 - `nlohmann/json` (config)
-
-- `spdlog` (logging)
-
+- `spdlog` (logging; fetched via CMake)
 - `cxxopts` (CLI)
-
-- `readerwriterqueue` (optional lock‑free queue for hook→audio/overlay events)
-
-> All third‑party as source; compile into the binary. No dynamic DLLs.
+- `readerwriterqueue` (optional lock-free queue for hook→audio/overlay events)
+> Vendored sources live in `third_party/`; others (e.g., `spdlog`) are downloaded at configure time via CMake. All third-party is compiled into the binary. No dynamic DLLs.
 
 ---
 

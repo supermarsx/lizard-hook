@@ -4,6 +4,9 @@
 #include <fstream>
 
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+
+#include "util/log.h"
 
 using json = nlohmann::json;
 
@@ -69,7 +72,9 @@ std::filesystem::path Config::user_config_path() {
 void Config::load() {
   std::ifstream in(config_path_);
   if (!in.is_open()) {
-    return; // keep defaults
+    spdlog::warn("Could not open config file: {}", config_path_.string());
+    lizard::util::init_logging(logging_level_);
+    return;
   }
 
   try {
@@ -109,9 +114,11 @@ void Config::load() {
       emoji_ = j.value("emoji", std::vector<std::string>{"\U0001F98E"});
       emoji_weighted_.clear();
     }
-  } catch (const std::exception &) {
-    // keep defaults on parse errors
+  } catch (const std::exception &e) {
+    spdlog::error("Failed to parse config {}: {}", config_path_.string(), e.what());
   }
+
+  lizard::util::init_logging(logging_level_);
 }
 
 bool Config::enabled() const { return enabled_; }
@@ -127,6 +134,8 @@ const std::unordered_map<std::string, double> &Config::emoji_weighted() const {
 const std::optional<std::filesystem::path> &Config::sound_path() const { return sound_path_; }
 
 const std::optional<std::filesystem::path> &Config::emoji_path() const { return emoji_path_; }
+
+const std::string &Config::logging_level() const { return logging_level_; }
 
 int Config::volume_percent() const { return volume_percent_; }
 

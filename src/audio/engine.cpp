@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "embedded.h"
+#include <spdlog/spdlog.h>
 
 #if defined(LIZARD_AUDIO_WASAPI)
 #define MA_ENABLE_WASAPI
@@ -35,6 +36,7 @@ struct DecodedSample {
 std::optional<DecodedSample> load_flac_file(const std::string &path) {
   drflac *flac = drflac_open_file(path.c_str(), nullptr);
   if (flac == nullptr) {
+    spdlog::error("Failed to open FLAC file {}", path);
     return std::nullopt;
   }
 
@@ -51,6 +53,7 @@ std::optional<DecodedSample> load_flac_file(const std::string &path) {
 std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t size) {
   drflac *flac = drflac_open_memory(data, size, nullptr);
   if (flac == nullptr) {
+    spdlog::error("Failed to open embedded FLAC data");
     return std::nullopt;
   }
 
@@ -76,6 +79,7 @@ public:
             int config_volume_percent = 100) {
     ma_result result = ma_engine_init(nullptr, &m_engine);
     if (result != MA_SUCCESS) {
+      spdlog::error("ma_engine_init failed: {}", result);
       return false;
     }
 
@@ -87,6 +91,7 @@ public:
                                  lizard::assets::lizard_processed_clean_no_meta_flac_len);
     }
     if (!decoded) {
+      spdlog::error("Failed to decode audio sample");
       ma_engine_uninit(&m_engine);
       return false;
     }
@@ -95,6 +100,7 @@ public:
                                                  decoded->pcm.data(), nullptr);
     result = ma_audio_buffer_init(&m_bufferConfig, &m_buffer);
     if (result != MA_SUCCESS) {
+      spdlog::error("ma_audio_buffer_init failed: {}", result);
       ma_engine_uninit(&m_engine);
       return false;
     }
