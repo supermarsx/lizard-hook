@@ -74,6 +74,15 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
   if (!pixels) {
     return false;
   }
+
+  // Pre-multiply RGB by alpha
+  for (int i = 0; i < w * h; ++i) {
+    unsigned char *p = pixels + i * 4;
+    unsigned char a = p[3];
+    p[0] = static_cast<unsigned char>(p[0] * a / 255);
+    p[1] = static_cast<unsigned char>(p[1] * a / 255);
+    p[2] = static_cast<unsigned char>(p[2] * a / 255);
+  }
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
@@ -100,16 +109,19 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
 
   glGenBuffers(1, &m_instance);
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
-  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 6, nullptr, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 7, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)0);
   glVertexAttribDivisor(2, 1);
   glEnableVertexAttribArray(3);
-  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(2 * sizeof(float)));
   glVertexAttribDivisor(3, 1);
   glEnableVertexAttribArray(4);
-  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(4 * sizeof(float)));
+  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(4 * sizeof(float)));
   glVertexAttribDivisor(4, 1);
+  glEnableVertexAttribArray(5);
+  glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(5 * sizeof(float)));
+  glVertexAttribDivisor(5, 1);
 
   const char *vs = R"GLSL(
       #version 330 core
@@ -117,21 +129,24 @@ bool Overlay::init(std::optional<std::filesystem::path> emoji_path) {
       layout(location=1) in vec2 inUV;
       layout(location=2) in vec2 iPos;
       layout(location=3) in vec2 iScale;
-      layout(location=4) in vec2 iUV;
+      layout(location=4) in float iAlpha;
+      layout(location=5) in vec2 iUV;
       out vec2 uv;
+      out float alpha;
       void main(){
         vec2 pos = inPos * iScale + iPos;
         gl_Position = vec4(pos,0.0,1.0);
         uv = inUV * iUV;
+        alpha = iAlpha;
       })GLSL";
   const char *fs = R"GLSL(
       #version 330 core
       in vec2 uv;
+      in float alpha;
       out vec4 color;
       uniform sampler2D uTex;
-      uniform float uAlpha;
       void main(){
-        color = texture(uTex, uv) * uAlpha;
+        color = texture(uTex, uv) * alpha;
       })GLSL";
   GLuint vsId = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(vsId, 1, &vs, nullptr);
@@ -186,6 +201,9 @@ void Overlay::render() {
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
   std::vector<float> data;
   for (const auto &b : m_badges) {
     const Sprite &s = m_sprites[b.sprite];
@@ -193,6 +211,7 @@ void Overlay::render() {
     data.push_back(b.y);
     data.push_back(b.scale);
     data.push_back(b.scale);
+    data.push_back(b.alpha);
     data.push_back(s.u1 - s.u0);
     data.push_back(s.v1 - s.v0);
   }
@@ -202,10 +221,7 @@ void Overlay::render() {
   glUseProgram(m_program);
   glBindVertexArray(m_vao);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  for (const auto &b : m_badges) {
-    glUniform1f(glGetUniformLocation(m_program, "uAlpha"), b.alpha);
-    glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, 1);
-  }
+  glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(m_badges.size()));
   platform::poll_events(m_window);
 }
 
