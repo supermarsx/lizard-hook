@@ -18,8 +18,7 @@ float compute_dpi(Display *dpy, ::Window win) {
   int screen = DefaultScreen(dpy);
   int width_px = DisplayWidth(dpy, screen);
   int width_mm = DisplayWidthMM(dpy, screen);
-  float dpi =
-      static_cast<float>(width_px) / static_cast<float>(width_mm) * 25.4f;
+  float dpi = static_cast<float>(width_px) / static_cast<float>(width_mm) * 25.4f;
   return dpi / 96.0f;
 }
 
@@ -39,10 +38,9 @@ Window create_overlay_window(const WindowDesc &desc) {
   attrs.event_mask = StructureNotifyMask;
   attrs.background_pixel = 0;
 
-  ::Window win =
-      XCreateWindow(g_display, g_root, 0, 0, desc.width, desc.height, 0,
-                    CopyFromParent, InputOutput, CopyFromParent,
-                    CWOverrideRedirect | CWEventMask | CWBackPixel, &attrs);
+  ::Window win = XCreateWindow(g_display, g_root, 0, 0, desc.width, desc.height, 0, CopyFromParent,
+                               InputOutput, CopyFromParent,
+                               CWOverrideRedirect | CWEventMask | CWBackPixel, &attrs);
 
   XMapRaised(g_display, win);
 
@@ -73,10 +71,9 @@ Window create_overlay_window(const WindowDesc &desc) {
     fb = configs[0];
     XFree(configs);
   }
-  using CreateContext =
-      GLXContext (*)(Display *, GLXFBConfig, GLXContext, Bool, const int *);
-  auto createContext = (CreateContext)glXGetProcAddress(
-      (const GLubyte *)"glXCreateContextAttribsARB");
+  using CreateContext = GLXContext (*)(Display *, GLXFBConfig, GLXContext, Bool, const int *);
+  auto createContext =
+      (CreateContext)glXGetProcAddress((const GLubyte *)"glXCreateContextAttribsARB");
   int ctxAttr[] = {GLX_CONTEXT_MAJOR_VERSION_ARB,
                    3,
                    GLX_CONTEXT_MINOR_VERSION_ARB,
@@ -93,14 +90,20 @@ Window create_overlay_window(const WindowDesc &desc) {
 
   result.native = (void *)win;
   result.dpiScale = compute_dpi(g_display, win);
+  result.glContext = ctx;
   return result;
 }
 
 void destroy_window(Window &window) {
   if (g_display && window.native) {
     glXMakeCurrent(g_display, None, nullptr);
+    if (window.glContext) {
+      glXDestroyContext(g_display, window.glContext);
+      window.glContext = nullptr;
+    }
     XDestroyWindow(g_display, (::Window)window.native);
     XCloseDisplay(g_display);
+    g_display = nullptr;
   }
   window.native = nullptr;
 }
