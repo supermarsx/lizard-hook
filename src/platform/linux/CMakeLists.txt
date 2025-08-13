@@ -19,3 +19,4 @@ target_link_libraries(lizard_platform_linux PUBLIC
 if(APPINDICATOR_FOUND)
   target_compile_definitions(lizard_platform_linux PRIVATE LIZARD_HAVE_APPINDICATOR)
 endif()
+add_warning_flags(lizard_platform_linux)

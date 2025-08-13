@@ -6,3 +6,4 @@ target_include_directories(lizard_overlay
 )
 
 target_link_libraries(lizard_overlay PUBLIC lizard_platform glad stb_image embedded_assets)
+add_warning_flags(lizard_overlay)
