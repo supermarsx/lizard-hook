@@ -49,6 +49,43 @@ TEST_CASE("parses asset paths", "[config]") {
   std::filesystem::remove(cfg_file);
 }
 
+TEST_CASE("asset paths reset when removed or empty", "[config]") {
+  using namespace std::chrono_literals;
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_paths_reset.json";
+
+  {
+    std::ofstream out(cfg_file);
+    out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+  }
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.sound_path().has_value());
+  REQUIRE(cfg.emoji_path().has_value());
+
+  std::this_thread::sleep_for(1s);
+  {
+    std::ofstream out(cfg_file);
+    out << R"({"sound_path":"","emoji_path":""})";
+  }
+
+  std::this_thread::sleep_for(2s);
+  REQUIRE_FALSE(cfg.sound_path().has_value());
+  REQUIRE_FALSE(cfg.emoji_path().has_value());
+
+  std::this_thread::sleep_for(1s);
+  {
+    std::ofstream out(cfg_file);
+    out << R"({})";
+  }
+
+  std::this_thread::sleep_for(2s);
+  REQUIRE_FALSE(cfg.sound_path().has_value());
+  REQUIRE_FALSE(cfg.emoji_path().has_value());
+
+  std::filesystem::remove(cfg_file);
+}
+
 TEST_CASE("reloads on file change", "[config]") {
   using namespace std::chrono_literals;
   auto tempdir = std::filesystem::temp_directory_path();

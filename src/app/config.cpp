@@ -127,10 +127,25 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     logging_level_ = j.value("logging_level", std::string("info"));
 
     if (j.contains("sound_path")) {
-      sound_path_ = j.at("sound_path").get<std::string>();
+      auto path = j.at("sound_path").get<std::string>();
+      if (path.empty()) {
+        sound_path_ = std::nullopt;
+      } else {
+        sound_path_ = path;
+      }
+    } else {
+      sound_path_ = std::nullopt;
     }
+
     if (j.contains("emoji_path")) {
-      emoji_path_ = j.at("emoji_path").get<std::string>();
+      auto path = j.at("emoji_path").get<std::string>();
+      if (path.empty()) {
+        emoji_path_ = std::nullopt;
+      } else {
+        emoji_path_ = path;
+      }
+    } else {
+      emoji_path_ = std::nullopt;
     }
 
     if (j.contains("emoji_weighted")) {
