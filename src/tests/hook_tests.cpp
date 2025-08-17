@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <chrono>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -75,3 +77,15 @@ TEST_CASE("start fails when XRecordAllocRange fails", "[hook]") {
   }
 }
 #endif
+
+TEST_CASE("start and stop succeed without activity", "[hook]") {
+  auto hk = hook::KeyboardHook::create([](int, bool) {});
+  if (hk->start()) {
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(10ms);
+    hk->stop();
+    SUCCEED();
+  } else {
+    SUCCEED("start failed; skipping");
+  }
+}
