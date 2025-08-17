@@ -72,6 +72,7 @@ private:
 
   platform::Window m_window{};
   std::vector<Badge> m_badges;
+  std::vector<float> m_instanceData;
   std::vector<Sprite> m_sprites;
   std::unordered_map<std::string, int> m_sprite_lookup;
   std::vector<int> m_selector_indices;
@@ -255,6 +256,10 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   }
   m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
 
+  auto badge_capacity = std::max(1, cfg.badges_per_second_max());
+  m_badges.reserve(static_cast<std::size_t>(badge_capacity));
+  m_instanceData.reserve(static_cast<std::size_t>(badge_capacity) * 9);
+
   if (!m_sprites.empty()) {
     spawn_badge(select_sprite(), 0.0f, 0.0f);
   }
@@ -376,6 +381,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
 
 void Overlay::shutdown() {
   stop();
+  // Release GL resources after the render loop has stopped
 #ifdef _WIN32
   if (m_window.device && m_window.glContext) {
     wglMakeCurrent((HDC)m_window.device, (HGLRC)m_window.glContext);
@@ -425,15 +431,7 @@ int Overlay::select_sprite() {
 }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
-  Badge b{};
-  b.x = x;
-  b.y = y;
-  b.scale = 0.1f;
-  b.alpha = 1.0f;
-  b.time = 0.0f;
-  b.lifetime = 1.0f;
-  b.sprite = sprite;
-  m_badges.push_back(b);
+  m_badges.emplace_back(Badge{x, y, 0.1f, 1.0f, 0.0f, 1.0f, sprite});
 }
 
 void Overlay::stop() { m_running = false; }
@@ -457,22 +455,24 @@ void Overlay::render() {
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-  std::vector<float> data;
-  data.reserve(m_badges.size() * 9);
+  m_instanceData.clear();
+  if (m_instanceData.capacity() < m_badges.size() * 9) {
+    m_instanceData.reserve(m_badges.size() * 9);
+  }
   for (const auto &b : m_badges) {
     const Sprite &s = m_sprites[b.sprite];
-    data.push_back(b.x);
-    data.push_back(b.y);
-    data.push_back(b.scale);
-    data.push_back(b.scale);
-    data.push_back(b.alpha);
-    data.push_back(s.u0);
-    data.push_back(s.v0);
-    data.push_back(s.u1);
-    data.push_back(s.v1);
+    m_instanceData.push_back(b.x);
+    m_instanceData.push_back(b.y);
+    m_instanceData.push_back(b.scale);
+    m_instanceData.push_back(b.scale);
+    m_instanceData.push_back(b.alpha);
+    m_instanceData.push_back(s.u0);
+    m_instanceData.push_back(s.v0);
+    m_instanceData.push_back(s.u1);
+    m_instanceData.push_back(s.v1);
   }
   glBindBuffer(GL_ARRAY_BUFFER, m_instance);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, data.size() * sizeof(float), data.data());
+  glBufferSubData(GL_ARRAY_BUFFER, 0, m_instanceData.size() * sizeof(float), m_instanceData.data());
 
   glUseProgram(m_program);
   glBindVertexArray(m_vao);
