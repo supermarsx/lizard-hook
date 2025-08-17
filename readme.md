@@ -84,8 +84,8 @@ To override these defaults at runtime, set `sound_path` and `emoji_path` in the
 `lizard.json` configuration file to point to external files. When these paths
 are provided, external assets will be loaded instead of the embedded ones. For
 `emoji_path`, the overlay looks for sprite coordinates in `<emoji_path>.json` or
-an `emoji_atlas.json` file in the same directory. If neither is found, the
-embedded atlas is used.
+an `emoji_atlas.json` file in the same directory. If the atlas is missing or
+invalid, the embedded defaults are used and an error is logged.
 
 ## Configuration
 

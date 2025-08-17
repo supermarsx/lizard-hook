@@ -93,7 +93,43 @@ private:
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
 #ifdef LIZARD_TEST
-  (void)emoji_path;
+  if (emoji_path) {
+    std::ifstream atlas_file(*emoji_path);
+    std::istringstream atlas_default(R"({
+  "sprites": {
+    "🦎": { "u0": 0.0, "v0": 0.0, "u1": 0.5, "v1": 0.5 },
+    "🐍": { "u0": 0.5, "v0": 0.0, "u1": 1.0, "v1": 0.5 },
+    "🐢": { "u0": 0.0, "v0": 0.5, "u1": 0.5, "v1": 1.0 }
+  }
+})");
+    std::istream *atlas = nullptr;
+    if (atlas_file.is_open()) {
+      atlas = &atlas_file;
+    } else {
+      atlas = &atlas_default;
+    }
+    try {
+      json j;
+      *atlas >> j;
+      if (j.contains("sprites") && j["sprites"].is_object()) {
+        for (const auto &[emoji, s] : j["sprites"].items()) {
+          Sprite sp{};
+          sp.u0 = s.value("u0", 0.0f);
+          sp.v0 = s.value("v0", 0.0f);
+          sp.u1 = s.value("u1", 1.0f);
+          sp.v1 = s.value("v1", 1.0f);
+          m_sprite_lookup[emoji] = static_cast<int>(m_sprites.size());
+          m_sprites.push_back(sp);
+        }
+      }
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to parse emoji atlas: {}", e.what());
+    }
+    if (m_sprites.empty()) {
+      m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
+      m_sprite_lookup["🦎"] = 0;
+    }
+  }
   std::vector<double> weights;
   if (!cfg.emoji_weighted().empty()) {
     for (const auto &[emoji, weight] : cfg.emoji_weighted()) {
@@ -255,8 +291,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
         m_sprites.push_back(sp);
       }
     }
-  } catch (const std::exception &) {
-    // fall back to single sprite below
+  } catch (const std::exception &e) {
+    spdlog::error("Failed to parse emoji atlas: {}", e.what());
   }
   if (m_sprites.empty()) {
     m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
