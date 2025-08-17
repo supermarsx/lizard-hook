@@ -77,6 +77,7 @@ private:
 
   platform::Window m_window{};
   std::vector<Badge> m_badges;
+  std::size_t m_badge_capacity = 0;
   std::vector<float> m_instanceData;
   std::vector<Sprite> m_sprites;
   std::unordered_map<std::string, int> m_sprite_lookup;
@@ -291,8 +292,9 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
 
   auto badge_capacity = std::max(1, cfg.badges_per_second_max());
-  m_badges.reserve(static_cast<std::size_t>(badge_capacity));
-  m_instanceData.reserve(static_cast<std::size_t>(badge_capacity) * 9);
+  m_badge_capacity = static_cast<std::size_t>(badge_capacity);
+  m_badges.reserve(m_badge_capacity);
+  m_instanceData.reserve(m_badge_capacity * 9);
 
   if (!m_sprites.empty()) {
     spawn_badge(select_sprite(), 0.0f, 0.0f);
@@ -476,6 +478,9 @@ int Overlay::select_sprite() {
 }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
+  if (m_badges.size() >= m_badge_capacity && !m_badges.empty()) {
+    m_badges.erase(m_badges.begin());
+  }
   m_badges.emplace_back(Badge{x, y, 0.1f, 1.0f, 0.0f, 1.0f, sprite});
 }
 
