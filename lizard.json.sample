@@ -11,7 +11,8 @@
   // Maximum simultaneous sound playbacks (default: 4)
   "max_concurrent_playbacks": 4,
 
-  // Limit on badge spawns per second (default: 12)
+  // Limit on badge spawns per second and maximum badges visible at once
+  // (oldest badges are dropped when exceeded, default: 12)
   "badges_per_second_max": 12,
 
   // Minimum badge size in pixels (default: 60)
