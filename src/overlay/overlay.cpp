@@ -22,15 +22,19 @@
 #include <CoreGraphics/CoreGraphics.h>
 #endif
 
+#ifndef LIZARD_TEST
 #include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#endif
 
 #ifdef __APPLE__
 #include <objc/message.h>
 #endif
 
+#ifndef LIZARD_TEST
 #include "embedded.h"
+#endif
 #include <nlohmann/json.hpp>
 
 #include "app/config.h"
@@ -66,6 +70,7 @@ public:
   void stop();
 
 private:
+  friend struct ::OverlayTestAccess;
   int select_sprite();
   void update(float dt);
   void render();
@@ -87,6 +92,35 @@ private:
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
+#ifdef LIZARD_TEST
+  (void)emoji_path;
+  std::vector<double> weights;
+  if (!cfg.emoji_weighted().empty()) {
+    for (const auto &[emoji, weight] : cfg.emoji_weighted()) {
+      auto it = m_sprite_lookup.find(emoji);
+      if (it != m_sprite_lookup.end()) {
+        m_selector_indices.push_back(it->second);
+        weights.push_back(weight);
+      }
+    }
+  } else {
+    for (const auto &emoji : cfg.emoji()) {
+      auto it = m_sprite_lookup.find(emoji);
+      if (it != m_sprite_lookup.end()) {
+        m_selector_indices.push_back(it->second);
+        weights.push_back(1.0);
+      }
+    }
+  }
+  if (m_selector_indices.empty()) {
+    for (int i = 0; i < static_cast<int>(m_sprites.size()); ++i) {
+      m_selector_indices.push_back(i);
+      weights.push_back(1.0);
+    }
+  }
+  m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
+  return true;
+#else
   platform::WindowDesc desc{};
 #ifdef _WIN32
   desc.x = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -385,9 +419,11 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
 
   m_running = true;
   return true;
+#endif
 }
 
 void Overlay::shutdown() {
+#ifndef LIZARD_TEST
   stop();
   // Release GL resources after the render loop has stopped
 #ifdef _WIN32
@@ -428,6 +464,7 @@ void Overlay::shutdown() {
     m_program = 0;
   }
   platform::destroy_window(m_window);
+#endif
 }
 
 int Overlay::select_sprite() {
@@ -457,6 +494,7 @@ void Overlay::update(float dt) {
 }
 
 void Overlay::render() {
+#ifndef LIZARD_TEST
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -487,9 +525,11 @@ void Overlay::render() {
   glBindTexture(GL_TEXTURE_2D, m_texture);
   glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(m_badges.size()));
   platform::poll_events(m_window);
+#endif
 }
 
 void Overlay::run(std::stop_token st) {
+#ifndef LIZARD_TEST
   using clock = std::chrono::steady_clock;
   const auto frame = std::chrono::milliseconds(16);
   auto last = clock::now();
@@ -506,6 +546,9 @@ void Overlay::run(std::stop_token st) {
     }
   }
   stop();
+#else
+  (void)st;
+#endif
 }
 
 } // namespace lizard::overlay
