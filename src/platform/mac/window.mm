@@ -19,10 +19,11 @@ Window create_overlay_window(const WindowDesc &desc) {
   Window result{};
   @autoreleasepool {
     NSUInteger style = NSWindowStyleMaskBorderless;
-    g_window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, desc.width, desc.height)
-                                           styleMask:style
-                                             backing:NSBackingStoreBuffered
-                                               defer:NO];
+    g_window =
+        [[NSWindow alloc] initWithContentRect:NSMakeRect(desc.x, desc.y, desc.width, desc.height)
+                                    styleMask:style
+                                      backing:NSBackingStoreBuffered
+                                        defer:NO];
     [g_window setLevel:NSStatusWindowLevel];
     [g_window setOpaque:NO];
     [g_window setIgnoresMouseEvents:YES];

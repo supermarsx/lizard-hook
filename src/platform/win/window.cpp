@@ -21,7 +21,7 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 } // namespace
 
-Window create_overlay_window([[maybe_unused]] const WindowDesc &desc) {
+Window create_overlay_window(const WindowDesc &desc) {
   Window result{};
   HINSTANCE inst = GetModuleHandle(nullptr);
   WNDCLASSW wc{};
@@ -32,10 +32,16 @@ Window create_overlay_window([[maybe_unused]] const WindowDesc &desc) {
 
   DWORD exStyle =
       WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-  int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-  int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-  int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-  int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  int x = desc.x;
+  int y = desc.y;
+  int width = static_cast<int>(desc.width);
+  int height = static_cast<int>(desc.height);
+  if (width == 0 || height == 0) {
+    x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  }
   g_hwnd = CreateWindowExW(exStyle, wc.lpszClassName, L"", WS_POPUP, x, y, width, height, nullptr,
                            nullptr, inst, nullptr);
   if (!g_hwnd) {
