@@ -2,6 +2,7 @@
 
 #ifdef __APPLE__
 #import <Cocoa/Cocoa.h>
+#include "embedded.h"
 
 namespace lizard::platform {
 
@@ -23,29 +24,25 @@ NSMenuItem *g_fps = nil;
   g_state.enabled = !g_state.enabled;
   if (g_callbacks.toggle_enabled)
     g_callbacks.toggle_enabled(g_state.enabled);
-  [g_enabled setState:g_state.enabled ? NSControlStateValueOn
-                                      : NSControlStateValueOff];
+  [g_enabled setState:g_state.enabled ? NSControlStateValueOn : NSControlStateValueOff];
 }
 - (void)toggleMute:(id)sender {
   g_state.muted = !g_state.muted;
   if (g_callbacks.toggle_mute)
     g_callbacks.toggle_mute(g_state.muted);
-  [g_mute
-      setState:g_state.muted ? NSControlStateValueOn : NSControlStateValueOff];
+  [g_mute setState:g_state.muted ? NSControlStateValueOn : NSControlStateValueOff];
 }
 - (void)toggleFullscreen:(id)sender {
   g_state.fullscreen_pause = !g_state.fullscreen_pause;
   if (g_callbacks.toggle_fullscreen_pause)
     g_callbacks.toggle_fullscreen_pause(g_state.fullscreen_pause);
-  [g_fullscreen setState:g_state.fullscreen_pause ? NSControlStateValueOn
-                                                  : NSControlStateValueOff];
+  [g_fullscreen setState:g_state.fullscreen_pause ? NSControlStateValueOn : NSControlStateValueOff];
 }
 - (void)toggleFPS:(id)sender {
   g_state.show_fps = !g_state.show_fps;
   if (g_callbacks.toggle_fps)
     g_callbacks.toggle_fps(g_state.show_fps);
-  [g_fps setState:g_state.show_fps ? NSControlStateValueOn
-                                   : NSControlStateValueOff];
+  [g_fps setState:g_state.show_fps ? NSControlStateValueOn : NSControlStateValueOff];
 }
 - (void)openConfig:(id)sender {
   if (g_callbacks.open_config)
@@ -64,14 +61,10 @@ NSMenuItem *g_fps = nil;
 TrayTarget *g_target = nil;
 
 void rebuild_menu() {
-  [g_enabled setState:g_state.enabled ? NSControlStateValueOn
-                                      : NSControlStateValueOff];
-  [g_mute
-      setState:g_state.muted ? NSControlStateValueOn : NSControlStateValueOff];
-  [g_fullscreen setState:g_state.fullscreen_pause ? NSControlStateValueOn
-                                                  : NSControlStateValueOff];
-  [g_fps setState:g_state.show_fps ? NSControlStateValueOn
-                                   : NSControlStateValueOff];
+  [g_enabled setState:g_state.enabled ? NSControlStateValueOn : NSControlStateValueOff];
+  [g_mute setState:g_state.muted ? NSControlStateValueOn : NSControlStateValueOff];
+  [g_fullscreen setState:g_state.fullscreen_pause ? NSControlStateValueOn : NSControlStateValueOff];
+  [g_fps setState:g_state.show_fps ? NSControlStateValueOn : NSControlStateValueOff];
 }
 
 } // namespace
@@ -81,9 +74,11 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
   g_callbacks = callbacks;
   @autoreleasepool {
     g_target = [TrayTarget new];
-    g_item = [[NSStatusBar systemStatusBar]
-        statusItemWithLength:NSVariableStatusItemLength];
-    [g_item.button setTitle:@"🦎"];
+    g_item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+    NSData *iconData = [NSData dataWithBytes:lizard::assets::lizard_regular_png
+                                      length:lizard::assets::lizard_regular_png_len];
+    NSImage *icon = [[NSImage alloc] initWithData:iconData];
+    [g_item.button setImage:icon];
     g_menu = [[NSMenu alloc] initWithTitle:@""];
     g_enabled = [[NSMenuItem alloc] initWithTitle:@"Enabled"
                                            action:@selector(toggleEnabled:)
@@ -93,10 +88,9 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
                                         action:@selector(toggleMute:)
                                  keyEquivalent:@""];
     [g_mute setTarget:g_target];
-    g_fullscreen =
-        [[NSMenuItem alloc] initWithTitle:@"Pause in Fullscreen"
-                                   action:@selector(toggleFullscreen:)
-                            keyEquivalent:@""];
+    g_fullscreen = [[NSMenuItem alloc] initWithTitle:@"Pause in Fullscreen"
+                                              action:@selector(toggleFullscreen:)
+                                       keyEquivalent:@""];
     [g_fullscreen setTarget:g_target];
     g_fps = [[NSMenuItem alloc] initWithTitle:@"Show FPS"
                                        action:@selector(toggleFPS:)
