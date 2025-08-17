@@ -38,8 +38,8 @@ Window create_overlay_window(const WindowDesc &desc) {
   attrs.event_mask = StructureNotifyMask;
   attrs.background_pixel = 0;
 
-  ::Window win = XCreateWindow(g_display, g_root, 0, 0, desc.width, desc.height, 0, CopyFromParent,
-                               InputOutput, CopyFromParent,
+  ::Window win = XCreateWindow(g_display, g_root, desc.x, desc.y, desc.width, desc.height, 0,
+                               CopyFromParent, InputOutput, CopyFromParent,
                                CWOverrideRedirect | CWEventMask | CWBackPixel, &attrs);
 
   XMapRaised(g_display, win);

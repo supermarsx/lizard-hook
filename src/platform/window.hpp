@@ -12,6 +12,8 @@ class NSOpenGLContext;
 namespace lizard::platform {
 
 struct WindowDesc {
+  std::int32_t x;
+  std::int32_t y;
   std::uint32_t width;
   std::uint32_t height;
   // On Windows the overlay always spans the virtual screen, so these are ignored.

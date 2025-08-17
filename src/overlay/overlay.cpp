@@ -13,6 +13,15 @@
 #include <unordered_map>
 #include <vector>
 
+#include <climits>
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
+#include <X11/Xlib.h>
+#elif defined(__APPLE__)
+#include <CoreGraphics/CoreGraphics.h>
+#endif
+
 #include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -77,10 +86,60 @@ private:
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
+  platform::WindowDesc desc{};
 #ifdef _WIN32
-  platform::WindowDesc desc{0, 0};
+  desc.x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+  desc.y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+  desc.width = static_cast<std::uint32_t>(GetSystemMetrics(SM_CXVIRTUALSCREEN));
+  desc.height = static_cast<std::uint32_t>(GetSystemMetrics(SM_CYVIRTUALSCREEN));
+#elif defined(__APPLE__)
+  uint32_t count = 0;
+  CGGetActiveDisplayList(0, nullptr, &count);
+  std::vector<CGDirectDisplayID> displays(count);
+  CGGetActiveDisplayList(count, displays.data(), &count);
+  int32_t minX = INT_MAX, minY = INT_MAX;
+  int32_t maxX = INT_MIN, maxY = INT_MIN;
+  for (uint32_t i = 0; i < count; ++i) {
+    CGRect r = CGDisplayBounds(displays[i]);
+    if (r.origin.x < minX)
+      minX = static_cast<int32_t>(r.origin.x);
+    if (r.origin.y < minY)
+      minY = static_cast<int32_t>(r.origin.y);
+    if (r.origin.x + r.size.width > maxX)
+      maxX = static_cast<int32_t>(r.origin.x + r.size.width);
+    if (r.origin.y + r.size.height > maxY)
+      maxY = static_cast<int32_t>(r.origin.y + r.size.height);
+  }
+  if (count > 0) {
+    desc.x = minX;
+    desc.y = minY;
+    desc.width = static_cast<std::uint32_t>(maxX - minX);
+    desc.height = static_cast<std::uint32_t>(maxY - minY);
+  } else {
+    desc.x = 0;
+    desc.y = 0;
+    desc.width = 800;
+    desc.height = 600;
+  }
+#elif defined(__linux__)
+  if (Display *dpy = XOpenDisplay(nullptr)) {
+    int screen = DefaultScreen(dpy);
+    desc.x = 0;
+    desc.y = 0;
+    desc.width = static_cast<std::uint32_t>(DisplayWidth(dpy, screen));
+    desc.height = static_cast<std::uint32_t>(DisplayHeight(dpy, screen));
+    XCloseDisplay(dpy);
+  } else {
+    desc.x = 0;
+    desc.y = 0;
+    desc.width = 800;
+    desc.height = 600;
+  }
 #else
-  platform::WindowDesc desc{800, 600};
+  desc.x = 0;
+  desc.y = 0;
+  desc.width = 800;
+  desc.height = 600;
 #endif
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
