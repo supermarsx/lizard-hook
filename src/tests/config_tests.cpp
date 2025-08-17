@@ -1,10 +1,11 @@
 #include "app/config.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
-#include <chrono>
-#include <thread>
+#include <mutex>
 #include <spdlog/sinks/memory_sink.h>
 
 using lizard::app::Config;
@@ -59,27 +60,35 @@ TEST_CASE("asset paths reset when removed or empty", "[config]") {
     out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
   }
 
-  Config cfg(tempdir, cfg_file);
+  Config cfg(tempdir, cfg_file, 10ms);
   REQUIRE(cfg.sound_path().has_value());
   REQUIRE(cfg.emoji_path().has_value());
 
-  std::this_thread::sleep_for(1s);
+  auto bump = [&] {
+    auto ts = std::filesystem::last_write_time(cfg_file);
+    std::filesystem::last_write_time(cfg_file, ts + 1s);
+  };
+
+  auto wait = [&](auto pred) {
+    std::mutex m;
+    std::unique_lock lk(m);
+    return cfg.reload_cv().wait_for(lk, 1s, pred);
+  };
+
   {
     std::ofstream out(cfg_file);
     out << R"({"sound_path":"","emoji_path":""})";
   }
+  bump();
+  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_path().has_value(); }));
 
-  std::this_thread::sleep_for(2s);
-  REQUIRE_FALSE(cfg.sound_path().has_value());
-  REQUIRE_FALSE(cfg.emoji_path().has_value());
-
-  std::this_thread::sleep_for(1s);
   {
     std::ofstream out(cfg_file);
     out << R"({})";
   }
+  bump();
+  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_path().has_value(); }));
 
-  std::this_thread::sleep_for(2s);
   REQUIRE_FALSE(cfg.sound_path().has_value());
   REQUIRE_FALSE(cfg.emoji_path().has_value());
 
@@ -95,17 +104,27 @@ TEST_CASE("reloads on file change", "[config]") {
     out << R"({"enabled":false})";
   }
 
-  Config cfg(tempdir, cfg_file);
+  Config cfg(tempdir, cfg_file, 10ms);
   REQUIRE_FALSE(cfg.enabled());
 
-  std::this_thread::sleep_for(1s);
+  auto bump = [&] {
+    auto ts = std::filesystem::last_write_time(cfg_file);
+    std::filesystem::last_write_time(cfg_file, ts + 1s);
+  };
+
+  auto wait = [&](auto pred) {
+    std::mutex m;
+    std::unique_lock lk(m);
+    return cfg.reload_cv().wait_for(lk, 1s, pred);
+  };
+
   {
     std::ofstream out(cfg_file);
     out << R"({"enabled":true})";
   }
+  bump();
 
-  std::this_thread::sleep_for(2s);
-  REQUIRE(cfg.enabled());
+  REQUIRE(wait([&] { return cfg.enabled(); }));
 
   std::filesystem::remove(cfg_file);
 }

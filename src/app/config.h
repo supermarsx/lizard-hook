@@ -1,6 +1,9 @@
 #pragma once
 
+#include <chrono>
+#include <condition_variable>
 #include <filesystem>
+#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -13,7 +16,8 @@ namespace lizard::app {
 class Config {
 public:
   Config(std::filesystem::path executable_dir,
-         std::optional<std::filesystem::path> cli_path = std::nullopt);
+         std::optional<std::filesystem::path> cli_path = std::nullopt,
+         std::chrono::milliseconds interval = std::chrono::seconds(1));
   ~Config();
 
   bool enabled() const;
@@ -36,6 +40,8 @@ public:
   std::string dpi_scaling_mode() const;
   std::string logging_level() const;
 
+  std::condition_variable &reload_cv() { return reload_cv_; }
+
 private:
   void load(std::unique_lock<std::shared_mutex> &lock);
   static std::filesystem::path user_config_path();
@@ -44,6 +50,10 @@ private:
   std::filesystem::path config_path_;
   std::filesystem::file_time_type last_write_{};
   std::jthread watcher_;
+  std::chrono::milliseconds interval_;
+  std::condition_variable cv_;
+  std::mutex cv_mutex_;
+  std::condition_variable reload_cv_;
 
   // config values
   bool enabled_{true};

@@ -13,8 +13,9 @@ using json = nlohmann::json;
 
 namespace lizard::app {
 
-Config::Config(std::filesystem::path executable_dir,
-               std::optional<std::filesystem::path> cli_path) {
+Config::Config(std::filesystem::path executable_dir, std::optional<std::filesystem::path> cli_path,
+               std::chrono::milliseconds interval)
+    : interval_(interval) {
   if (cli_path && std::filesystem::exists(*cli_path)) {
     config_path_ = *cli_path;
   } else {
@@ -35,23 +36,33 @@ Config::Config(std::filesystem::path executable_dir,
   }
 
   watcher_ = std::jthread([this](std::stop_token st) {
-    using namespace std::chrono_literals;
+    std::unique_lock lk(cv_mutex_);
     while (!st.stop_requested()) {
-      std::this_thread::sleep_for(1s);
+      cv_.wait_for(lk, interval_, [&] { return st.stop_requested(); });
+      if (st.stop_requested()) {
+        break;
+      }
+      lk.unlock();
       std::unique_lock lock(mutex_);
       if (!std::filesystem::exists(config_path_)) {
+        lk.lock();
         continue;
       }
       auto current = std::filesystem::last_write_time(config_path_);
       if (current != last_write_) {
         last_write_ = current;
         load(lock);
+        reload_cv_.notify_all();
       }
+      lk.lock();
     }
   });
 }
 
-Config::~Config() { watcher_.request_stop(); }
+Config::~Config() {
+  watcher_.request_stop();
+  cv_.notify_all();
+}
 
 std::filesystem::path Config::user_config_path() {
 #ifdef _WIN32
