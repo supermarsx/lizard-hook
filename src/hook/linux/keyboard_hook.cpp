@@ -16,10 +16,17 @@
 
 namespace hook {
 
+#ifdef LIZARD_TEST
+namespace testing {
+void set_xrecord_alloc_range(XRecordRange *(*)());
+}
+#endif
+
 namespace {
 
 class LinuxKeyboardHook : public KeyboardHook {
 public:
+  using AllocRangeFn = XRecordRange *(*)();
   explicit LinuxKeyboardHook(KeyCallback cb) : callback_(std::move(cb)) {}
   ~LinuxKeyboardHook() override { stop(); }
 
@@ -93,7 +100,14 @@ private:
           XCloseDisplay(dpy);
           return;
         }
-        XRecordRange *range = XRecordAllocRange();
+        XRecordRange *range = alloc_range_();
+        if (!range) {
+          spdlog::error("XRecordAllocRange failed");
+          started.set_value(false);
+          XCloseDisplay(data_dpy);
+          XCloseDisplay(dpy);
+          return;
+        }
         range->device_events.first = KeyPress;
         range->device_events.last = KeyRelease;
         XRecordClientSpec clients = XRecordAllClients;
@@ -139,6 +153,10 @@ private:
   KeyCallback callback_;
   std::jthread thread_;
   bool running_{false};
+  static inline AllocRangeFn alloc_range_ = &XRecordAllocRange;
+#ifdef LIZARD_TEST
+  friend void ::hook::testing::set_xrecord_alloc_range(AllocRangeFn);
+#endif
 };
 
 } // namespace
@@ -146,5 +164,13 @@ private:
 std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback) {
   return std::make_unique<LinuxKeyboardHook>(std::move(callback));
 }
+
+#ifdef LIZARD_TEST
+namespace testing {
+void set_xrecord_alloc_range(LinuxKeyboardHook::AllocRangeFn fn) {
+  LinuxKeyboardHook::alloc_range_ = fn;
+}
+} // namespace testing
+#endif
 
 } // namespace hook
