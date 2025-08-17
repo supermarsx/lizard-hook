@@ -10,6 +10,9 @@
 
 #include <cerrno>
 #include <future>
+#include <algorithm>
+#include <sys/select.h>
+#include <unistd.h>
 #include <thread>
 
 #include <spdlog/spdlog.h>
@@ -53,6 +56,9 @@ public:
     running_ = false;
     if (thread_.joinable()) {
       thread_.request_stop();
+      if (wake_fds_[1] != -1) {
+        [[maybe_unused]] ssize_t n = write(wake_fds_[1], "\0", 1);
+      }
       thread_.join();
     }
   }
@@ -63,6 +69,12 @@ private:
     if (!dpy) {
       spdlog::error("XOpenDisplay failed: {}", errno);
       started.set_value(false);
+      return;
+    }
+    if (pipe(wake_fds_) != 0) {
+      spdlog::error("pipe failed: {}", errno);
+      started.set_value(false);
+      XCloseDisplay(dpy);
       return;
     }
     int xi_opcode = 0, event, error;
@@ -77,16 +89,33 @@ private:
       XISelectEvents(dpy, DefaultRootWindow(dpy), &mask, 1);
       started.set_value(true);
       XEvent ev;
+      int xfd = XConnectionNumber(dpy);
+      int nfds = std::max(xfd, wake_fds_[0]) + 1;
       while (!st.stop_requested()) {
-        XNextEvent(dpy, &ev);
-        if (ev.xcookie.type == GenericEvent && ev.xcookie.extension == xi_opcode &&
-            XGetEventData(dpy, &ev.xcookie)) {
-          if (ev.xcookie.evtype == XI_RawKeyPress || ev.xcookie.evtype == XI_RawKeyRelease) {
-            auto *raw = static_cast<XIRawEvent *>(ev.xcookie.data);
-            bool pressed = ev.xcookie.evtype == XI_RawKeyPress;
-            callback_(raw->detail, pressed);
+        fd_set set;
+        FD_ZERO(&set);
+        FD_SET(xfd, &set);
+        FD_SET(wake_fds_[0], &set);
+        if (select(nfds, &set, nullptr, nullptr, nullptr) <= 0) {
+          continue;
+        }
+        if (FD_ISSET(wake_fds_[0], &set)) {
+          char buf[8];
+          [[maybe_unused]] ssize_t n = read(wake_fds_[0], buf, sizeof(buf));
+        }
+        if (FD_ISSET(xfd, &set)) {
+          while (XPending(dpy)) {
+            XNextEvent(dpy, &ev);
+            if (ev.xcookie.type == GenericEvent && ev.xcookie.extension == xi_opcode &&
+                XGetEventData(dpy, &ev.xcookie)) {
+              if (ev.xcookie.evtype == XI_RawKeyPress || ev.xcookie.evtype == XI_RawKeyRelease) {
+                auto *raw = static_cast<XIRawEvent *>(ev.xcookie.data);
+                bool pressed = ev.xcookie.evtype == XI_RawKeyPress;
+                callback_(raw->detail, pressed);
+              }
+              XFreeEventData(dpy, &ev.xcookie);
+            }
           }
-          XFreeEventData(dpy, &ev.xcookie);
         }
       }
     } else {
@@ -148,11 +177,20 @@ private:
       }
     }
     XCloseDisplay(dpy);
+    if (wake_fds_[0] != -1) {
+      close(wake_fds_[0]);
+      wake_fds_[0] = -1;
+    }
+    if (wake_fds_[1] != -1) {
+      close(wake_fds_[1]);
+      wake_fds_[1] = -1;
+    }
   }
 
   KeyCallback callback_;
   std::jthread thread_;
   bool running_{false};
+  int wake_fds_[2]{-1, -1};
   static inline AllocRangeFn alloc_range_ = &XRecordAllocRange;
 #ifdef LIZARD_TEST
   friend void ::hook::testing::set_xrecord_alloc_range(AllocRangeFn);
