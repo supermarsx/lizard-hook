@@ -1,8 +1,8 @@
-#include "platform/window.hpp"
+// Overlay implementation
+#include "overlay/overlay.h"
 
 #include <algorithm>
 #include <chrono>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -10,10 +10,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <unordered_map>
-#include <vector>
 
-#include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -24,57 +21,11 @@
 #include "embedded.h"
 #include <nlohmann/json.hpp>
 
-#include "app/config.h"
 #include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 
 namespace lizard::overlay {
-
-struct Sprite {
-  float u0;
-  float v0;
-  float u1;
-  float v1;
-};
-
-struct Badge {
-  float x;
-  float y;
-  float scale;
-  float alpha;
-  float time;
-  float lifetime;
-  int sprite;
-};
-
-class Overlay {
-public:
-  bool init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path = std::nullopt);
-  void shutdown();
-  void spawn_badge(int sprite, float x, float y);
-  void run(std::stop_token st);
-  void stop();
-
-private:
-  int select_sprite();
-  void update(float dt);
-  void render();
-
-  platform::Window m_window{};
-  std::vector<Badge> m_badges;
-  std::vector<Sprite> m_sprites;
-  std::unordered_map<std::string, int> m_sprite_lookup;
-  std::vector<int> m_selector_indices;
-  std::discrete_distribution<> m_selector;
-  std::mt19937 m_rng{std::random_device{}()};
-  GLuint m_texture = 0;
-  GLuint m_vao = 0;
-  GLuint m_vbo = 0;
-  GLuint m_instance = 0;
-  GLuint m_program = 0;
-  bool m_running = false;
-};
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
 #ifdef _WIN32
@@ -366,6 +317,7 @@ int Overlay::select_sprite() {
 }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
+  std::lock_guard lock(m_mutex);
   Badge b{};
   b.x = x;
   b.y = y;
@@ -375,9 +327,16 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   b.lifetime = 1.0f;
   b.sprite = sprite;
   m_badges.push_back(b);
+  m_cv.notify_one();
 }
 
-void Overlay::stop() { m_running = false; }
+void Overlay::stop() {
+  {
+    std::lock_guard lock(m_mutex);
+    m_running = false;
+  }
+  m_cv.notify_all();
+}
 
 void Overlay::update(float dt) {
   for (auto &b : m_badges) {
@@ -426,19 +385,45 @@ void Overlay::run(std::stop_token st) {
   using clock = std::chrono::steady_clock;
   const auto frame = std::chrono::milliseconds(16);
   auto last = clock::now();
+  std::unique_lock lock(m_mutex);
   while (m_running && !st.stop_requested()) {
+    if (m_badges.empty()) {
+      m_cv.wait(lock, st, [this] { return !m_badges.empty() || !m_running; });
+      last = clock::now();
+      continue;
+    }
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
     update(dt);
-    render();
+    if (m_program) {
+      render();
+    }
+    ++m_frames;
+    lock.unlock();
     auto end = clock::now();
     auto spend = end - now;
     if (spend < frame) {
       std::this_thread::sleep_for(frame - spend);
     }
+    lock.lock();
   }
-  stop();
+  m_running = false;
 }
+
+namespace testing {
+void set_running(Overlay &o, bool r) {
+  std::lock_guard lock(o.m_mutex);
+  o.m_running = r;
+  if (r) {
+    o.m_cv.notify_one();
+  }
+}
+
+std::size_t frame_count(const Overlay &o) {
+  std::lock_guard lock(o.m_mutex);
+  return o.m_frames;
+}
+} // namespace testing
 
 } // namespace lizard::overlay
