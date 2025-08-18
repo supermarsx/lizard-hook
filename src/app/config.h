@@ -39,6 +39,8 @@ public:
   int volume_percent() const;
   std::string dpi_scaling_mode() const;
   std::string logging_level() const;
+  int logging_queue_size() const;
+  int logging_worker_count() const;
 
   std::condition_variable &reload_cv() { return reload_cv_; }
 
@@ -75,6 +77,8 @@ private:
   int volume_percent_{65};
   std::string dpi_scaling_mode_{"per_monitor_v2"};
   std::string logging_level_{"info"};
+  int logging_queue_size_{8192};
+  int logging_worker_count_{1};
 };
 
 } // namespace lizard::app
