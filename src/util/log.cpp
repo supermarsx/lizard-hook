@@ -1,14 +1,17 @@
 #include "log.h"
 
+#include <spdlog/async.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/spdlog.h>
 
 namespace lizard::util {
 
-void init_logging(std::string_view level) {
+void init_logging(std::string_view level, std::size_t queue_size, std::size_t worker_count) {
   auto logger = spdlog::get("lizard");
   if (!logger) {
-    logger = spdlog::rotating_logger_mt("lizard", "lizard.log", 1024 * 1024 * 5, 3);
+    spdlog::init_thread_pool(queue_size, worker_count);
+    logger = spdlog::rotating_logger_mt<spdlog::async_factory>("lizard", "lizard.log",
+                                                               1024 * 1024 * 5, 3);
   }
   spdlog::set_default_logger(logger);
   auto lvl = spdlog::level::from_str(std::string(level));

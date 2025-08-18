@@ -6,7 +6,8 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
-#include <spdlog/sinks/memory_sink.h>
+#include <spdlog/sinks/ringbuffer_sink.h>
+#include <spdlog/spdlog.h>
 
 using lizard::app::Config;
 
@@ -25,13 +26,15 @@ TEST_CASE("parses provided values", "[config]") {
   auto tempdir = std::filesystem::temp_directory_path();
   auto cfg_file = tempdir / "lizard_cfg.json";
   std::ofstream out(cfg_file);
-  out << R"({"enabled":false,"emoji":["A","B"],"emoji_weighted":{"X":1.0}})";
+  out << R"({"enabled":false,"emoji":["A","B"],"emoji_weighted":{"X":1.0},"logging_queue_size":42,"logging_worker_count":2})";
   out.close();
 
   Config cfg(tempdir, cfg_file);
   REQUIRE_FALSE(cfg.enabled());
   REQUIRE(cfg.emoji().empty());
   REQUIRE(cfg.emoji_weighted().at("X") == Catch::Approx(1.0));
+  REQUIRE(cfg.logging_queue_size() == 42);
+  REQUIRE(cfg.logging_worker_count() == 2);
 
   std::filesystem::remove(cfg_file);
 }
@@ -135,7 +138,7 @@ TEST_CASE("clamps out-of-range numeric values", "[config]") {
   std::ofstream out(cfg_file);
   out << R"({"sound_cooldown_ms":-5,"max_concurrent_playbacks":-1,
 "badges_per_second_max":-3,"badge_min_px":-20,"badge_max_px":-10,
-"volume_percent":-50})";
+"volume_percent":-50,"logging_queue_size":-1,"logging_worker_count":0})";
   out.close();
 
   Config cfg(tempdir, cfg_file);
@@ -145,6 +148,8 @@ TEST_CASE("clamps out-of-range numeric values", "[config]") {
   REQUIRE(cfg.badge_min_px() == 0);
   REQUIRE(cfg.badge_max_px() == 0);
   REQUIRE(cfg.volume_percent() == 0);
+  REQUIRE(cfg.logging_queue_size() == 0);
+  REQUIRE(cfg.logging_worker_count() == 1);
 
   std::filesystem::remove(cfg_file);
 }
@@ -171,7 +176,7 @@ TEST_CASE("logs warnings for adjusted values", "[config]") {
   out << R"({"sound_cooldown_ms":-5,"badge_min_px":-2,"badge_max_px":-1,"volume_percent":150})";
   out.close();
 
-  auto sink = std::make_shared<spdlog::sinks::memory_sink_mt>();
+  auto sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(32);
   auto logger = std::make_shared<spdlog::logger>("test", sink);
   spdlog::set_default_logger(logger);
 
@@ -181,7 +186,7 @@ TEST_CASE("logs warnings for adjusted values", "[config]") {
   bool saw_badge_min = false;
   bool saw_badge_max = false;
   bool saw_volume = false;
-  for (const auto &line : sink->lines()) {
+  for (const auto &line : sink->last_formatted()) {
     if (line.find("sound_cooldown_ms") != std::string::npos)
       saw_sound = true;
     if (line.find("badge_min_px") != std::string::npos)

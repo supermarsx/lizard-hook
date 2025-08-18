@@ -90,7 +90,7 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
   std::ifstream in(config_path_);
   if (!in.is_open()) {
     spdlog::warn("Could not open config file: {}", config_path_.string());
-    lizard::util::init_logging(logging_level_);
+    lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_);
     return;
   }
 
@@ -136,6 +136,13 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
 
     dpi_scaling_mode_ = j.value("dpi_scaling_mode", std::string("per_monitor_v2"));
     logging_level_ = j.value("logging_level", std::string("info"));
+    logging_queue_size_ = clamp_nonneg(j.value("logging_queue_size", 8192), "logging_queue_size");
+    logging_worker_count_ =
+        clamp_nonneg(j.value("logging_worker_count", 1), "logging_worker_count");
+    if (logging_worker_count_ == 0) {
+      spdlog::warn("logging_worker_count zero; clamping to 1");
+      logging_worker_count_ = 1;
+    }
 
     if (j.contains("sound_path")) {
       auto path = j.at("sound_path").get<std::string>();
@@ -173,7 +180,7 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     spdlog::error("Failed to parse config {}: {}", config_path_.string(), e.what());
   }
 
-  lizard::util::init_logging(logging_level_);
+  lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_);
 }
 
 bool Config::enabled() const {
@@ -269,6 +276,16 @@ std::string Config::dpi_scaling_mode() const {
 std::string Config::logging_level() const {
   std::shared_lock lock(mutex_);
   return logging_level_;
+}
+
+int Config::logging_queue_size() const {
+  std::shared_lock lock(mutex_);
+  return logging_queue_size_;
+}
+
+int Config::logging_worker_count() const {
+  std::shared_lock lock(mutex_);
+  return logging_worker_count_;
 }
 
 } // namespace lizard::app
