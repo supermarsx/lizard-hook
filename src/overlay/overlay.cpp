@@ -38,6 +38,7 @@
 #include <nlohmann/json.hpp>
 
 #include "app/config.h"
+#include "overlay/gl_raii.h"
 #include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
@@ -84,11 +85,11 @@ private:
   std::vector<int> m_selector_indices;
   std::discrete_distribution<> m_selector;
   std::mt19937 m_rng{std::random_device{}()};
-  GLuint m_texture = 0;
-  GLuint m_vao = 0;
-  GLuint m_vbo = 0;
-  GLuint m_instance = 0;
-  GLuint m_program = 0;
+  gl::Texture m_texture;
+  gl::VertexArray m_vao;
+  gl::Buffer m_vbo;
+  gl::Buffer m_instance;
+  gl::Program m_program;
   bool m_running = false;
 };
 
@@ -239,8 +240,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     p[1] = static_cast<unsigned char>(p[1] * a / 255);
     p[2] = static_cast<unsigned char>(p[2] * a / 255);
   }
-  glGenTextures(1, &m_texture);
-  glBindTexture(GL_TEXTURE_2D, m_texture);
+  m_texture.create();
+  glBindTexture(GL_TEXTURE_2D, m_texture.id);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -339,10 +340,10 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   // Geometry
   const float verts[] = {-0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, 1.0f, 0.0f,
                          0.5f,  0.5f,  1.0f, 1.0f, -0.5f, 0.5f,  0.0f, 1.0f};
-  glGenVertexArrays(1, &m_vao);
-  glBindVertexArray(m_vao);
-  glGenBuffers(1, &m_vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+  m_vao.create();
+  glBindVertexArray(m_vao.id);
+  m_vbo.create();
+  glBindBuffer(GL_ARRAY_BUFFER, m_vbo.id);
   glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
 
   glEnableVertexAttribArray(0);
@@ -350,8 +351,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
 
-  glGenBuffers(1, &m_instance);
-  glBindBuffer(GL_ARRAY_BUFFER, m_instance);
+  m_instance.create();
+  glBindBuffer(GL_ARRAY_BUFFER, m_instance.id);
   glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 9, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)0);
@@ -425,9 +426,9 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     return false;
   }
 
-  m_program = glCreateProgram();
-  glAttachShader(m_program, vsId);
-  glAttachShader(m_program, fsId);
+  m_program.create();
+  glAttachShader(m_program.id, vsId);
+  glAttachShader(m_program.id, fsId);
 
   auto link_program = [](GLuint prog) -> bool {
     glLinkProgram(prog);
@@ -445,10 +446,10 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     return true;
   };
 
-  if (!link_program(m_program)) {
+  if (!link_program(m_program.id)) {
     glDeleteShader(vsId);
     glDeleteShader(fsId);
-    m_program = 0;
+    m_program.reset();
     return false;
   }
 
@@ -481,26 +482,11 @@ void Overlay::shutdown() {
     makeCurrent((id)m_window.glContext, sel_getUid("makeCurrentContext"));
   }
 #endif
-  if (m_texture) {
-    glDeleteTextures(1, &m_texture);
-    m_texture = 0;
-  }
-  if (m_vbo) {
-    glDeleteBuffers(1, &m_vbo);
-    m_vbo = 0;
-  }
-  if (m_instance) {
-    glDeleteBuffers(1, &m_instance);
-    m_instance = 0;
-  }
-  if (m_vao) {
-    glDeleteVertexArrays(1, &m_vao);
-    m_vao = 0;
-  }
-  if (m_program) {
-    glDeleteProgram(m_program);
-    m_program = 0;
-  }
+  m_texture.reset();
+  m_vbo.reset();
+  m_instance.reset();
+  m_vao.reset();
+  m_program.reset();
   platform::destroy_window(m_window);
 #endif
 }
@@ -558,12 +544,12 @@ void Overlay::render() {
     m_instanceData.push_back(s.u1);
     m_instanceData.push_back(s.v1);
   }
-  glBindBuffer(GL_ARRAY_BUFFER, m_instance);
+  glBindBuffer(GL_ARRAY_BUFFER, m_instance.id);
   glBufferSubData(GL_ARRAY_BUFFER, 0, m_instanceData.size() * sizeof(float), m_instanceData.data());
 
-  glUseProgram(m_program);
-  glBindVertexArray(m_vao);
-  glBindTexture(GL_TEXTURE_2D, m_texture);
+  glUseProgram(m_program.id);
+  glBindVertexArray(m_vao.id);
+  glBindTexture(GL_TEXTURE_2D, m_texture.id);
   glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(m_badges.size()));
   platform::poll_events(m_window);
 #endif

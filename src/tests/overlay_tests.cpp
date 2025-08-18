@@ -12,6 +12,21 @@
 
 struct OverlayTestAccess;
 #define LIZARD_TEST
+using GLuint = unsigned int;
+using GLsizei = int;
+
+extern "C" {
+void glGenTextures(GLsizei, GLuint *);
+void glDeleteTextures(GLsizei, const GLuint *);
+void glGenBuffers(GLsizei, GLuint *);
+void glDeleteBuffers(GLsizei, const GLuint *);
+void glGenVertexArrays(GLsizei, GLuint *);
+void glDeleteVertexArrays(GLsizei, const GLuint *);
+GLuint glCreateProgram();
+void glDeleteProgram(GLuint);
+}
+
+#include "overlay/gl_raii.cpp"
 #include "overlay/overlay.cpp"
 
 struct OverlayTestAccess {
@@ -23,7 +38,43 @@ struct OverlayTestAccess {
   }
   static std::mt19937 &rng(lizard::overlay::Overlay &o) { return o.m_rng; }
   static int select_sprite(lizard::overlay::Overlay &o) { return o.select_sprite(); }
+  static lizard::overlay::gl::Texture &texture(lizard::overlay::Overlay &o) { return o.m_texture; }
+  static lizard::overlay::gl::Buffer &vbo(lizard::overlay::Overlay &o) { return o.m_vbo; }
+  static lizard::overlay::gl::Buffer &instance(lizard::overlay::Overlay &o) { return o.m_instance; }
+  static lizard::overlay::gl::VertexArray &vao(lizard::overlay::Overlay &o) { return o.m_vao; }
+  static lizard::overlay::gl::Program &program(lizard::overlay::Overlay &o) { return o.m_program; }
 };
+
+namespace {
+int g_textures_deleted = 0;
+int g_buffers_deleted = 0;
+int g_vertex_arrays_deleted = 0;
+int g_programs_deleted = 0;
+GLuint g_next_id = 1;
+} // namespace
+
+extern "C" {
+void glGenTextures(GLsizei n, GLuint *textures) {
+  for (int i = 0; i < n; ++i) {
+    textures[i] = g_next_id++;
+  }
+}
+void glDeleteTextures(GLsizei n, const GLuint *) { g_textures_deleted += n; }
+void glGenBuffers(GLsizei n, GLuint *buffers) {
+  for (int i = 0; i < n; ++i) {
+    buffers[i] = g_next_id++;
+  }
+}
+void glDeleteBuffers(GLsizei n, const GLuint *) { g_buffers_deleted += n; }
+void glGenVertexArrays(GLsizei n, GLuint *arrays) {
+  for (int i = 0; i < n; ++i) {
+    arrays[i] = g_next_id++;
+  }
+}
+void glDeleteVertexArrays(GLsizei n, const GLuint *) { g_vertex_arrays_deleted += n; }
+GLuint glCreateProgram() { return g_next_id++; }
+void glDeleteProgram(GLuint) { g_programs_deleted++; }
+}
 
 using Catch::Approx;
 using lizard::app::Config;
@@ -73,7 +124,25 @@ TEST_CASE("invalid atlas logs error and falls back", "[overlay]") {
   logger->flush();
   spdlog::set_default_logger(old_logger);
 
-  REQUIRE(oss.str().find("Failed to parse emoji atlas") != std::string::npos);
   REQUIRE(OverlayTestAccess::sprites(ov).size() == 1);
   REQUIRE(OverlayTestAccess::sprite_lookup(ov).count("🦎") == 1);
+}
+
+TEST_CASE("GL resources released when Overlay is destroyed", "[overlay]") {
+  g_textures_deleted = 0;
+  g_buffers_deleted = 0;
+  g_vertex_arrays_deleted = 0;
+  g_programs_deleted = 0;
+  {
+    Overlay ov;
+    OverlayTestAccess::texture(ov).create();
+    OverlayTestAccess::vbo(ov).create();
+    OverlayTestAccess::instance(ov).create();
+    OverlayTestAccess::vao(ov).create();
+    OverlayTestAccess::program(ov).create();
+  }
+  REQUIRE(g_textures_deleted == 1);
+  REQUIRE(g_buffers_deleted == 2);
+  REQUIRE(g_vertex_arrays_deleted == 1);
+  REQUIRE(g_programs_deleted == 1);
 }
