@@ -1,7 +1,10 @@
 #include "../tray.hpp"
 
 #ifdef _WIN32
+#include "resource.h"
+
 #include <shellapi.h>
+#include <spdlog/spdlog.h>
 #include <windows.h>
 
 namespace lizard::platform {
@@ -25,15 +28,11 @@ enum MenuId {
 };
 
 void update_menu() {
-  CheckMenuItem(g_menu, ID_ENABLED,
-                MF_BYCOMMAND | (g_state.enabled ? MF_CHECKED : MF_UNCHECKED));
-  CheckMenuItem(g_menu, ID_MUTE,
-                MF_BYCOMMAND | (g_state.muted ? MF_CHECKED : MF_UNCHECKED));
+  CheckMenuItem(g_menu, ID_ENABLED, MF_BYCOMMAND | (g_state.enabled ? MF_CHECKED : MF_UNCHECKED));
+  CheckMenuItem(g_menu, ID_MUTE, MF_BYCOMMAND | (g_state.muted ? MF_CHECKED : MF_UNCHECKED));
   CheckMenuItem(g_menu, ID_FULLSCREEN,
-                MF_BYCOMMAND |
-                    (g_state.fullscreen_pause ? MF_CHECKED : MF_UNCHECKED));
-  CheckMenuItem(g_menu, ID_FPS,
-                MF_BYCOMMAND | (g_state.show_fps ? MF_CHECKED : MF_UNCHECKED));
+                MF_BYCOMMAND | (g_state.fullscreen_pause ? MF_CHECKED : MF_UNCHECKED));
+  CheckMenuItem(g_menu, ID_FPS, MF_BYCOMMAND | (g_state.show_fps ? MF_CHECKED : MF_UNCHECKED));
 }
 
 void on_command(UINT id) {
@@ -101,9 +100,16 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
   wc.lpfnWndProc = wnd_proc;
   wc.hInstance = GetModuleHandle(nullptr);
   wc.lpszClassName = L"LizardTray";
-  RegisterClassW(&wc);
-  g_hwnd = CreateWindowW(wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                         nullptr, wc.hInstance, nullptr);
+  if (!RegisterClassW(&wc)) {
+    spdlog::error("RegisterClassW failed: {}", GetLastError());
+    return false;
+  }
+  g_hwnd = CreateWindowW(wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance,
+                         nullptr);
+  if (!g_hwnd) {
+    spdlog::error("CreateWindowW failed: {}", GetLastError());
+    return false;
+  }
 
   g_menu = CreatePopupMenu();
   AppendMenuW(g_menu, MF_STRING, ID_ENABLED, L"Enabled");
@@ -122,9 +128,19 @@ bool init_tray(const TrayState &state, const TrayCallbacks &callbacks) {
   g_nid.uID = 1;
   g_nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   g_nid.uCallbackMessage = WM_TRAY;
-  g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-    lstrcpyW(g_nid.szTip, L"Lizard Hook");
-  Shell_NotifyIconW(NIM_ADD, &g_nid);
+  g_nid.hIcon = reinterpret_cast<HICON>(LoadImageW(wc.hInstance, MAKEINTRESOURCEW(IDI_LIZARD_TRAY),
+                                                   IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+  if (!g_nid.hIcon)
+    g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+  lstrcpyW(g_nid.szTip, L"Lizard Hook");
+  if (!Shell_NotifyIconW(NIM_ADD, &g_nid)) {
+    spdlog::error("Shell_NotifyIconW failed: {}", GetLastError());
+    DestroyMenu(g_menu);
+    g_menu = nullptr;
+    DestroyWindow(g_hwnd);
+    g_hwnd = nullptr;
+    return false;
+  }
   return true;
 }
 
@@ -135,6 +151,10 @@ void update_tray(const TrayState &state) {
 
 void shutdown_tray() {
   Shell_NotifyIconW(NIM_DELETE, &g_nid);
+  if (g_nid.hIcon) {
+    DestroyIcon(g_nid.hIcon);
+    g_nid.hIcon = nullptr;
+  }
   if (g_menu)
     DestroyMenu(g_menu);
   g_menu = nullptr;
