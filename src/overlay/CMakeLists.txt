@@ -1,4 +1,4 @@
-add_library(lizard_overlay overlay.cpp)
+add_library(lizard_overlay overlay.cpp gl_raii.cpp)
 
 target_include_directories(lizard_overlay
   PUBLIC
