@@ -62,6 +62,11 @@ struct Badge {
   int sprite;
 };
 
+enum class BadgeSpawnStrategy {
+  RandomScreen,
+  CursorFollow,
+};
+
 class Overlay {
 public:
   bool init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path = std::nullopt);
@@ -91,9 +96,16 @@ private:
   gl::Buffer m_instance;
   gl::Program m_program;
   bool m_running = false;
+  BadgeSpawnStrategy m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
+  auto strategy = cfg.badge_spawn_strategy();
+  if (strategy == "cursor_follow") {
+    m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
+  } else {
+    m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
+  }
 #ifdef LIZARD_TEST
   if (emoji_path) {
     std::ifstream atlas_file(*emoji_path);
@@ -500,10 +512,17 @@ int Overlay::select_sprite() {
 }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
+  float px = x;
+  float py = y;
+  if (m_spawn_strategy == BadgeSpawnStrategy::RandomScreen) {
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    px = dist(m_rng);
+    py = dist(m_rng);
+  }
   if (m_badges.size() >= m_badge_capacity && !m_badges.empty()) {
     m_badges.erase(m_badges.begin());
   }
-  m_badges.emplace_back(Badge{x, y, 0.1f, 1.0f, 0.0f, 1.0f, sprite});
+  m_badges.emplace_back(Badge{px, py, 0.1f, 1.0f, 0.0f, 1.0f, sprite});
 }
 
 void Overlay::stop() { m_running = false; }

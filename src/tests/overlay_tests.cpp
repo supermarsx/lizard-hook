@@ -43,6 +43,9 @@ struct OverlayTestAccess {
   static lizard::overlay::gl::Buffer &instance(lizard::overlay::Overlay &o) { return o.m_instance; }
   static lizard::overlay::gl::VertexArray &vao(lizard::overlay::Overlay &o) { return o.m_vao; }
   static lizard::overlay::gl::Program &program(lizard::overlay::Overlay &o) { return o.m_program; }
+  static std::vector<lizard::overlay::Badge> &badges(lizard::overlay::Overlay &o) {
+    return o.m_badges;
+  }
 };
 
 namespace {
@@ -145,4 +148,27 @@ TEST_CASE("GL resources released when Overlay is destroyed", "[overlay]") {
   REQUIRE(g_buffers_deleted == 2);
   REQUIRE(g_vertex_arrays_deleted == 1);
   REQUIRE(g_programs_deleted == 1);
+}
+
+TEST_CASE("random_screen strategy randomizes badge position", "[overlay]") {
+  Config cfg(std::filesystem::temp_directory_path());
+  cfg.badge_spawn_strategy_ = "random_screen";
+  Overlay ov;
+  ov.init(cfg);
+  OverlayTestAccess::rng(ov).seed(1337);
+  ov.spawn_badge(0, 0.0f, 0.0f);
+  auto &b = OverlayTestAccess::badges(ov).back();
+  REQUIRE(b.x == Approx(0.262025f));
+  REQUIRE(b.y == Approx(0.56053f));
+}
+
+TEST_CASE("cursor_follow strategy uses provided coordinates", "[overlay]") {
+  Config cfg(std::filesystem::temp_directory_path());
+  cfg.badge_spawn_strategy_ = "cursor_follow";
+  Overlay ov;
+  ov.init(cfg);
+  ov.spawn_badge(0, 0.25f, 0.75f);
+  auto &b = OverlayTestAccess::badges(ov).back();
+  REQUIRE(b.x == Approx(0.25f));
+  REQUIRE(b.y == Approx(0.75f));
 }
