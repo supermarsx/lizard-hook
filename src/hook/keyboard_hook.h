@@ -3,6 +3,10 @@
 #include <functional>
 #include <memory>
 
+namespace lizard::app {
+class Config;
+}
+
 namespace hook {
 
 // Callback invoked for each key event.
@@ -22,7 +26,7 @@ public:
   virtual void stop() = 0;
 
   // Factory to create a platform-appropriate hook implementation.
-  static std::unique_ptr<KeyboardHook> create(KeyCallback callback);
+  static std::unique_ptr<KeyboardHook> create(KeyCallback callback, const lizard::app::Config &cfg);
 };
 
 } // namespace hook
