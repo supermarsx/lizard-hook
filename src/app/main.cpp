@@ -79,14 +79,16 @@ int main(int argc, char **argv) {
                                                  [&]() { running = false; }};
   lizard::platform::init_tray(tray_state, tray_callbacks);
 
-  auto hook = hook::KeyboardHook::create([&](int /*key*/, bool pressed) {
-    if (pressed && cfg.enabled()) {
-      if (!cfg.mute()) {
-        engine.play();
-      }
-      overlay.spawn_badge(0, 0.5f, 0.5f);
-    }
-  });
+  auto hook = hook::KeyboardHook::create(
+      [&](int /*key*/, bool pressed) {
+        if (pressed && cfg.enabled()) {
+          if (!cfg.mute()) {
+            engine.play();
+          }
+          overlay.spawn_badge(0, 0.5f, 0.5f);
+        }
+      },
+      cfg);
   hook->start();
 
   std::jthread reload_thread([&](std::stop_token st) {

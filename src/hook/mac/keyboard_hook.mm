@@ -1,9 +1,15 @@
 #import <ApplicationServices/ApplicationServices.h>
 
 #include "hook/keyboard_hook.h"
+#include "hook/filter.h"
+
+#include "app/config.h"
 
 #include <future>
 #include <thread>
+#include <filesystem>
+#include <string>
+#include <libproc.h>
 
 #include <spdlog/spdlog.h>
 
@@ -17,7 +23,8 @@ using CGEventTapCreateFn = CFMachPortRef (*)(CGEventTapLocation, CGEventTapPlace
 
 class MacKeyboardHook : public KeyboardHook {
 public:
-  explicit MacKeyboardHook(KeyCallback cb) : callback_(std::move(cb)) {}
+  MacKeyboardHook(KeyCallback cb, const lizard::app::Config &cfg)
+      : callback_(std::move(cb)), config_(cfg) {}
   ~MacKeyboardHook() override { stop(); }
 
   bool start() override {
@@ -56,7 +63,18 @@ private:
     if (type == kCGEventKeyDown || type == kCGEventKeyUp) {
       int key = static_cast<int>(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode));
       bool pressed = type == kCGEventKeyDown;
-      self->callback_(key, pressed);
+      bool injected = false;
+      CGEventSourceRef source = CGEventCreateEventSourceFromEvent(event);
+      if (source) {
+        injected = CGEventSourceGetSourceState(source) != kCGEventSourceStateHIDSystemState;
+        CFRelease(source);
+      }
+      pid_t pid =
+          static_cast<pid_t>(CGEventGetIntegerValueField(event, kCGEventSourceUnixProcessID));
+      std::string proc = process_name_fn_(pid);
+      if (should_deliver_event(self->config_, injected, proc)) {
+        self->callback_(key, pressed);
+      }
     }
     return event;
   }
@@ -85,13 +103,26 @@ private:
   }
 
   KeyCallback callback_;
+  const lizard::app::Config &config_;
   std::jthread thread_;
   CFMachPortRef tap_{nullptr};
   CFRunLoopRef run_loop_{nullptr};
   bool running_{false};
   static inline CGEventTapCreateFn cg_event_tap_create_ = &CGEventTapCreate;
+  using ProcessNameFn = std::string (*)(pid_t);
 #ifdef LIZARD_TEST
+  static inline ProcessNameFn process_name_fn_ = [](pid_t) { return std::string(); };
   friend void testing::set_cg_event_tap_create(CGEventTapCreateFn);
+  friend void testing::set_process_name_resolver(ProcessNameFn);
+#else
+  static std::string default_process_name(pid_t pid) {
+    char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+    if (proc_pidpath(pid, pathbuf, sizeof(pathbuf)) > 0) {
+      return std::filesystem::path(pathbuf).filename().string();
+    }
+    return {};
+  }
+  static inline ProcessNameFn process_name_fn_ = &default_process_name;
 #endif
 };
 
@@ -100,13 +131,17 @@ namespace testing {
 inline void set_cg_event_tap_create(CGEventTapCreateFn fn) {
   MacKeyboardHook::cg_event_tap_create_ = fn;
 }
+inline void set_process_name_resolver(MacKeyboardHook::ProcessNameFn fn) {
+  MacKeyboardHook::process_name_fn_ = fn;
+}
 } // namespace testing
 #endif
 
 } // namespace
 
-std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback) {
-  return std::make_unique<MacKeyboardHook>(std::move(callback));
+std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback,
+                                                   const lizard::app::Config &cfg) {
+  return std::make_unique<MacKeyboardHook>(std::move(callback), cfg);
 }
 
 } // namespace hook
