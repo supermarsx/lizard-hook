@@ -7,11 +7,7 @@
 #include <string_view>
 #include <vector>
 
-struct ma_engine;
-struct ma_context;
-struct ma_audio_buffer_config;
-struct ma_audio_buffer;
-struct ma_sound;
+#include "miniaudio.h"
 
 namespace lizard::audio {
 
@@ -25,6 +21,7 @@ public:
   void shutdown();
   void play();
   void set_volume(float vol);
+  bool restart();
 
 private:
   struct Voice {
@@ -42,6 +39,9 @@ private:
   std::chrono::steady_clock::time_point m_lastPlay{};
   std::chrono::milliseconds m_cooldown{};
   float m_volume{1.0f};
+  std::optional<std::filesystem::path> m_soundPath{};
+  std::string m_backend;
+  int m_volumePercent{100};
 };
 
 } // namespace lizard::audio

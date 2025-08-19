@@ -1,14 +1,3 @@
-#include "engine.h"
-
-#include <algorithm>
-#include <filesystem>
-#include <optional>
-#include <string>
-#include <vector>
-
-#include "embedded.h"
-#include <spdlog/spdlog.h>
-
 #if defined(LIZARD_AUDIO_WASAPI)
 #define MA_ENABLE_WASAPI
 #elif defined(LIZARD_AUDIO_COREAUDIO)
@@ -18,10 +7,19 @@
 #endif
 
 #define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
+#include "engine.h"
 
 #define DR_FLAC_IMPLEMENTATION
 #include "dr_flac.h"
+
+#include <algorithm>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "embedded.h"
+#include <spdlog/spdlog.h>
 
 namespace lizard::audio {
 
@@ -66,6 +64,16 @@ std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t 
   drflac_close(flac);
   return sample;
 }
+
+void device_notification_cb(const ma_device_notification *pNotification) {
+  if (pNotification == nullptr || pNotification->pDevice == nullptr) {
+    return;
+  }
+  auto *engine = reinterpret_cast<Engine *>(pNotification->pDevice->pUserData);
+  if (pNotification->type == ma_device_notification_type_rerouted) {
+    engine->restart();
+  }
+}
 } // namespace
 
 Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
@@ -76,6 +84,9 @@ Engine::~Engine() { shutdown(); }
 bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_percent,
                   std::string_view backend) {
   ma_engine_config engineConfig = ma_engine_config_init();
+  m_soundPath = sound_path;
+  m_backend = std::string(backend);
+  engineConfig.notificationCallback = device_notification_cb;
 
   ma_backend maBackend{};
   bool useBackend = true;
@@ -95,7 +106,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
     const ma_backend backends[] = {maBackend};
     result = ma_context_init(backends, 1, &contextConfig, &m_context);
     if (result != MA_SUCCESS) {
-      spdlog::error("ma_context_init failed: {}", result);
+      spdlog::error("ma_context_init failed: {}", static_cast<int>(result));
       return false;
     }
     m_contextInitialized = true;
@@ -104,7 +115,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
 
   result = ma_engine_init(&engineConfig, &m_engine);
   if (result != MA_SUCCESS) {
-    spdlog::error("ma_engine_init failed: {}", result);
+    spdlog::error("ma_engine_init failed: {}", static_cast<int>(result));
     if (m_contextInitialized) {
       ma_context_uninit(&m_context);
       m_contextInitialized = false;
@@ -133,7 +144,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
                                                decoded->pcm.data(), nullptr);
   result = ma_audio_buffer_init(&m_bufferConfig, &m_buffer);
   if (result != MA_SUCCESS) {
-    spdlog::error("ma_audio_buffer_init failed: {}", result);
+    spdlog::error("ma_audio_buffer_init failed: {}", static_cast<int>(result));
     ma_engine_uninit(&m_engine);
     if (m_contextInitialized) {
       ma_context_uninit(&m_context);
@@ -147,6 +158,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
     ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
   }
   int clampedPercent = std::clamp(volume_percent, 0, 100);
+  m_volumePercent = clampedPercent;
   set_volume(static_cast<float>(clampedPercent) / 100.0f);
   return true;
 }
@@ -162,6 +174,11 @@ void Engine::shutdown() {
     ma_context_uninit(&m_context);
     m_contextInitialized = false;
   }
+}
+
+bool Engine::restart() {
+  shutdown();
+  return init(m_soundPath, m_volumePercent, m_backend);
 }
 
 void Engine::play() {
