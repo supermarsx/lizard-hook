@@ -48,6 +48,7 @@ struct OverlayTestAccess {
   }
 };
 
+bool g_overlay_log_called = false;
 namespace {
 int g_textures_deleted = 0;
 int g_buffers_deleted = 0;
@@ -77,6 +78,13 @@ void glGenVertexArrays(GLsizei n, GLuint *arrays) {
 void glDeleteVertexArrays(GLsizei n, const GLuint *) { g_vertex_arrays_deleted += n; }
 GLuint glCreateProgram() { return g_next_id++; }
 void glDeleteProgram(GLuint) { g_programs_deleted++; }
+
+unsigned char *stbi_load(const char *, int *, int *, int *, int) { return nullptr; }
+unsigned char *stbi_load_from_memory(const unsigned char *, int, int *, int *, int *, int) {
+  return nullptr;
+}
+const char *stbi_failure_reason(void) { return "stub failure"; }
+void stbi_image_free(void *) {}
 }
 
 using Catch::Approx;
@@ -129,6 +137,22 @@ TEST_CASE("invalid atlas logs error and falls back", "[overlay]") {
 
   REQUIRE(OverlayTestAccess::sprites(ov).size() == 1);
   REQUIRE(OverlayTestAccess::sprite_lookup(ov).count("🦎") == 1);
+}
+
+TEST_CASE("invalid image logs error", "[overlay]") {
+  std::filesystem::path tmp = std::filesystem::temp_directory_path() / "lizard_bad.png";
+  {
+    std::ofstream out(tmp, std::ios::binary);
+    out << "not a png";
+  }
+  Config cfg(std::filesystem::temp_directory_path());
+  Overlay ov;
+  g_overlay_log_called = false;
+  bool ok = ov.init(cfg, tmp);
+  std::filesystem::remove(tmp);
+
+  REQUIRE_FALSE(ok);
+  REQUIRE(g_overlay_log_called);
 }
 
 TEST_CASE("GL resources released when Overlay is destroyed", "[overlay]") {
