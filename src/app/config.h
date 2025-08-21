@@ -41,6 +41,7 @@ public:
   std::string logging_level() const;
   int logging_queue_size() const;
   int logging_worker_count() const;
+  std::filesystem::path logging_path() const;
 
   std::condition_variable &reload_cv() { return reload_cv_; }
 
@@ -79,6 +80,7 @@ private:
   std::string logging_level_{"info"};
   int logging_queue_size_{8192};
   int logging_worker_count_{1};
+  std::filesystem::path logging_path_{};
 };
 
 } // namespace lizard::app

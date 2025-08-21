@@ -87,10 +87,12 @@ std::filesystem::path Config::user_config_path() {
 
 void Config::load(std::unique_lock<std::shared_mutex> &lock) {
   (void)lock; // lock is held by caller
+  logging_path_ = config_path_.parent_path() / "lizard.log";
   std::ifstream in(config_path_);
   if (!in.is_open()) {
     spdlog::warn("Could not open config file: {}", config_path_.string());
-    lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_);
+    lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_,
+                               logging_path_);
     return;
   }
 
@@ -143,6 +145,7 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
       spdlog::warn("logging_worker_count zero; clamping to 1");
       logging_worker_count_ = 1;
     }
+    logging_path_ = j.value("logging_path", logging_path_.string());
 
     if (j.contains("sound_path")) {
       auto path = j.at("sound_path").get<std::string>();
@@ -180,7 +183,8 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     spdlog::error("Failed to parse config {}: {}", config_path_.string(), e.what());
   }
 
-  lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_);
+  lizard::util::init_logging(logging_level_, logging_queue_size_, logging_worker_count_,
+                             logging_path_);
 }
 
 bool Config::enabled() const {
@@ -286,6 +290,11 @@ int Config::logging_queue_size() const {
 int Config::logging_worker_count() const {
   std::shared_lock lock(mutex_);
   return logging_worker_count_;
+}
+
+std::filesystem::path Config::logging_path() const {
+  std::shared_lock lock(mutex_);
+  return logging_path_;
 }
 
 } // namespace lizard::app
