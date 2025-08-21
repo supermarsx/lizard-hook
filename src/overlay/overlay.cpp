@@ -26,6 +26,13 @@
 #include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#else
+extern "C" {
+unsigned char *stbi_load(const char *, int *, int *, int *, int);
+unsigned char *stbi_load_from_memory(const unsigned char *, int, int *, int *, int *, int);
+const char *stbi_failure_reason(void);
+void stbi_image_free(void *);
+}
 #endif
 
 #ifdef __APPLE__
@@ -40,6 +47,10 @@
 #include "app/config.h"
 #include "overlay/gl_raii.h"
 #include <spdlog/spdlog.h>
+
+#ifdef LIZARD_TEST
+extern bool g_overlay_log_called;
+#endif
 
 using json = nlohmann::json;
 
@@ -107,43 +118,80 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
   }
 #ifdef LIZARD_TEST
-  if (emoji_path) {
-    std::ifstream atlas_file(*emoji_path);
-    std::istringstream atlas_default(R"({
+  if (emoji_path && emoji_path->extension() == ".png") {
+    int w, h, channels;
+    unsigned char *pixels = stbi_load(emoji_path->string().c_str(), &w, &h, &channels, 4);
+    if (!pixels) {
+#ifdef LIZARD_TEST
+      g_overlay_log_called = true;
+#endif
+      spdlog::error("Failed to load emoji atlas {}: {}", emoji_path->string(),
+                    stbi_failure_reason());
+      return false;
+    }
+    stbi_image_free(pixels);
+  }
+
+  std::ifstream atlas_file;
+  std::istringstream atlas_default(R"({
   "sprites": {
     "🦎": { "u0": 0.0, "v0": 0.0, "u1": 0.5, "v1": 0.5 },
     "🐍": { "u0": 0.5, "v0": 0.0, "u1": 1.0, "v1": 0.5 },
     "🐢": { "u0": 0.0, "v0": 0.5, "u1": 0.5, "v1": 1.0 }
   }
 })");
-    std::istream *atlas = nullptr;
-    if (atlas_file.is_open()) {
-      atlas = &atlas_file;
+  std::istream *atlas = nullptr;
+  if (emoji_path) {
+    if (emoji_path->extension() == ".json") {
+      atlas_file.open(*emoji_path);
+      if (atlas_file.is_open()) {
+        atlas = &atlas_file;
+      }
     } else {
-      atlas = &atlas_default;
-    }
-    try {
-      json j;
-      *atlas >> j;
-      if (j.contains("sprites") && j["sprites"].is_object()) {
-        for (const auto &[emoji, s] : j["sprites"].items()) {
-          Sprite sp{};
-          sp.u0 = s.value("u0", 0.0f);
-          sp.v0 = s.value("v0", 0.0f);
-          sp.u1 = s.value("u1", 1.0f);
-          sp.v1 = s.value("v1", 1.0f);
-          m_sprite_lookup[emoji] = static_cast<int>(m_sprites.size());
-          m_sprites.push_back(sp);
+      std::filesystem::path json_path = *emoji_path;
+      json_path += ".json";
+      if (std::filesystem::exists(json_path)) {
+        atlas_file.open(json_path);
+        if (atlas_file.is_open()) {
+          atlas = &atlas_file;
         }
       }
-    } catch (const std::exception &e) {
-      spdlog::error("Failed to parse emoji atlas: {}", e.what());
-    }
-    if (m_sprites.empty()) {
-      m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
-      m_sprite_lookup["🦎"] = 0;
+      if (!atlas) {
+        json_path = emoji_path->parent_path() / "emoji_atlas.json";
+        if (std::filesystem::exists(json_path)) {
+          atlas_file.open(json_path);
+          if (atlas_file.is_open()) {
+            atlas = &atlas_file;
+          }
+        }
+      }
     }
   }
+  if (!atlas) {
+    atlas = &atlas_default;
+  }
+  try {
+    json j;
+    *atlas >> j;
+    if (j.contains("sprites") && j["sprites"].is_object()) {
+      for (const auto &[emoji, s] : j["sprites"].items()) {
+        Sprite sp{};
+        sp.u0 = s.value("u0", 0.0f);
+        sp.v0 = s.value("v0", 0.0f);
+        sp.u1 = s.value("u1", 1.0f);
+        sp.v1 = s.value("v1", 1.0f);
+        m_sprite_lookup[emoji] = static_cast<int>(m_sprites.size());
+        m_sprites.push_back(sp);
+      }
+    }
+  } catch (const std::exception &e) {
+    spdlog::error("Failed to parse emoji atlas: {}", e.what());
+  }
+  if (m_sprites.empty()) {
+    m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
+    m_sprite_lookup["🦎"] = 0;
+  }
+
   std::vector<double> weights;
   if (!cfg.emoji_weighted().empty()) {
     for (const auto &[emoji, weight] : cfg.emoji_weighted()) {
@@ -241,6 +289,12 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
                                    lizard::assets::lizard_regular_png_len, &w, &h, &channels, 4);
   }
   if (!pixels) {
+    if (emoji_path && std::filesystem::exists(*emoji_path)) {
+      spdlog::error("Failed to load emoji atlas {}: {}", emoji_path->string(),
+                    stbi_failure_reason());
+    } else {
+      spdlog::error("Failed to load embedded emoji atlas: {}", stbi_failure_reason());
+    }
     return false;
   }
 
