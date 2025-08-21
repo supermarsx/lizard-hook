@@ -145,22 +145,28 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     }
 
     if (j.contains("sound_path")) {
-      auto path = j.at("sound_path").get<std::string>();
+      auto path = std::filesystem::path(j.at("sound_path").get<std::string>());
       if (path.empty()) {
         sound_path_ = std::nullopt;
       } else {
-        sound_path_ = path;
+        if (!path.is_absolute()) {
+          path = config_path_.parent_path() / path;
+        }
+        sound_path_ = std::move(path);
       }
     } else {
       sound_path_ = std::nullopt;
     }
 
     if (j.contains("emoji_path")) {
-      auto path = j.at("emoji_path").get<std::string>();
+      auto path = std::filesystem::path(j.at("emoji_path").get<std::string>());
       if (path.empty()) {
         emoji_path_ = std::nullopt;
       } else {
-        emoji_path_ = path;
+        if (!path.is_absolute()) {
+          path = config_path_.parent_path() / path;
+        }
+        emoji_path_ = std::move(path);
       }
     } else {
       emoji_path_ = std::nullopt;

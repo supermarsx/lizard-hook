@@ -53,6 +53,25 @@ TEST_CASE("parses asset paths", "[config]") {
   std::filesystem::remove(cfg_file);
 }
 
+TEST_CASE("resolves relative asset paths", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path() / "lizard_cfg_rel";
+  std::filesystem::create_directories(tempdir);
+  auto cfg_file = tempdir / "lizard_cfg_rel.json";
+  {
+    std::ofstream out(cfg_file);
+    out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+  }
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.sound_path().has_value());
+  REQUIRE(cfg.emoji_path().has_value());
+  REQUIRE(cfg.sound_path().value() == tempdir / "custom.flac");
+  REQUIRE(cfg.emoji_path().value() == tempdir / "custom.png");
+
+  std::filesystem::remove(cfg_file);
+  std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("asset paths reset when removed or empty", "[config]") {
   using namespace std::chrono_literals;
   auto tempdir = std::filesystem::temp_directory_path();
