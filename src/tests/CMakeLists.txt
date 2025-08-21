@@ -5,7 +5,7 @@ add_test(NAME config COMMAND config_tests)
 add_warning_flags(config_tests)
 
 add_executable(hook_tests hook_tests.cpp)
-target_link_libraries(hook_tests PRIVATE lizard_hook Catch2::Catch2WithMain)
+target_link_libraries(hook_tests PRIVATE lizard_hook lizard_app Catch2::Catch2WithMain)
 target_include_directories(hook_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(hook_tests PRIVATE LIZARD_TEST)
 target_compile_definitions(lizard_hook PRIVATE LIZARD_TEST)

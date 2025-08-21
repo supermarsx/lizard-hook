@@ -20,13 +20,14 @@ public:
   virtual ~KeyboardHook() = default;
 
   // Starts the hook. Returns true on success.
-  virtual bool start() = 0;
+  virtual auto start() -> bool = 0;
 
   // Stops the hook. Safe to call multiple times.
   virtual void stop() = 0;
 
   // Factory to create a platform-appropriate hook implementation.
-  static std::unique_ptr<KeyboardHook> create(KeyCallback callback, const lizard::app::Config &cfg);
+  static auto create(KeyCallback callback, const lizard::app::Config &cfg)
+      -> std::unique_ptr<KeyboardHook>;
 };
 
 } // namespace hook

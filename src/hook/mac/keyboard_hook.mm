@@ -128,19 +128,19 @@ private:
 
 #ifdef LIZARD_TEST
 namespace testing {
-inline void set_cg_event_tap_create(CGEventTapCreateFn fn) {
-  MacKeyboardHook::cg_event_tap_create_ = fn;
+inline void set_cg_event_tap_create(CGEventTapCreateFn hook_fn) {
+  MacKeyboardHook::cg_event_tap_create_ = hook_fn;
 }
-inline void set_process_name_resolver(MacKeyboardHook::ProcessNameFn fn) {
-  MacKeyboardHook::process_name_fn_ = fn;
+inline void set_process_name_resolver(MacKeyboardHook::ProcessNameFn resolver_fn) {
+  MacKeyboardHook::process_name_fn_ = resolver_fn;
 }
 } // namespace testing
 #endif
 
 } // namespace
 
-std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback,
-                                                   const lizard::app::Config &cfg) {
+auto KeyboardHook::create(KeyCallback callback, const lizard::app::Config &cfg)
+    -> std::unique_ptr<KeyboardHook> {
   return std::make_unique<MacKeyboardHook>(std::move(callback), cfg);
 }
 
