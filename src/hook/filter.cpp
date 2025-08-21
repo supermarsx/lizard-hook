@@ -15,8 +15,8 @@ std::string to_lower(std::string s) {
 }
 } // namespace
 
-bool should_deliver_event(const lizard::app::Config &cfg, bool injected,
-                          const std::string &process_name) {
+auto should_deliver_event(const lizard::app::Config &cfg, bool injected,
+                          const std::string &process_name) -> bool {
   if (cfg.ignore_injected() && injected) {
     return false;
   }

@@ -57,7 +57,7 @@ private:
     if (code == HC_ACTION && instance_) {
       const auto *info = reinterpret_cast<KBDLLHOOKSTRUCT *>(lParam);
       bool pressed = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-      bool injected = (info->flags & LLKHF_INJECTED) != 0;
+      bool injected = (info->flags & (LLKHF_INJECTED | LLKHF_LOWER_IL_INJECTED)) != 0;
       std::string proc = process_name_();
       if (!should_deliver_event(instance_->config_, injected, proc)) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -130,7 +130,7 @@ private:
 
 #ifdef LIZARD_TEST
 namespace testing {
-inline void set_setwindows_hook_ex(SetHookFn fn) { WindowsKeyboardHook::set_hook_ = fn; }
+inline void set_setwindows_hook_ex(SetHookFn hook_fn) { WindowsKeyboardHook::set_hook_ = hook_fn; }
 inline void set_process_name_resolver(WindowsKeyboardHook::ProcessNameFn fn) {
   WindowsKeyboardHook::process_name_ = fn;
 }
@@ -139,8 +139,8 @@ inline void set_process_name_resolver(WindowsKeyboardHook::ProcessNameFn fn) {
 
 } // namespace
 
-std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback,
-                                                   const lizard::app::Config &cfg) {
+auto KeyboardHook::create(KeyCallback callback, const lizard::app::Config &cfg)
+    -> std::unique_ptr<KeyboardHook> {
   return std::make_unique<WindowsKeyboardHook>(std::move(callback), cfg);
 }
 

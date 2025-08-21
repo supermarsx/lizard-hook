@@ -13,7 +13,7 @@
 #include <windows.h>
 namespace hook::testing {
 using SetHookFn = HHOOK(WINAPI *)(int, HOOKPROC, HINSTANCE, DWORD);
-void set_setwindows_hook_ex(SetHookFn fn);
+void set_setwindows_hook_ex(SetHookFn hook_fn);
 } // namespace hook::testing
 #elif defined(__APPLE__)
 #import <ApplicationServices/ApplicationServices.h>
@@ -21,7 +21,7 @@ namespace hook::testing {
 using CGEventTapCreateFn = CFMachPortRef (*)(CGEventTapLocation, CGEventTapPlacement,
                                              CGEventTapOptions, CGEventMask, CGEventTapCallBack,
                                              void *);
-void set_cg_event_tap_create(CGEventTapCreateFn fn);
+void set_cg_event_tap_create(CGEventTapCreateFn hook_fn);
 } // namespace hook::testing
 #elif defined(__linux__)
 #include <cstdlib>
@@ -29,7 +29,7 @@ void set_cg_event_tap_create(CGEventTapCreateFn fn);
 #include <X11/extensions/record.h>
 namespace hook::testing {
 using AllocRangeFn = XRecordRange *(*)();
-void set_xrecord_alloc_range(AllocRangeFn fn);
+void set_xrecord_alloc_range(AllocRangeFn range_fn);
 } // namespace hook::testing
 #endif
 
@@ -40,42 +40,42 @@ TEST_CASE("start fails when platform API unavailable", "[hook]") {
     return nullptr;
   });
   lizard::app::Config cfg(std::filesystem::temp_directory_path());
-  auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-  REQUIRE_FALSE(hk->start());
+  auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+  REQUIRE_FALSE(hook_instance->start());
 #elif defined(__APPLE__)
   hook::testing::set_cg_event_tap_create([](CGEventTapLocation, CGEventTapPlacement,
                                             CGEventTapOptions, CGEventMask, CGEventTapCallBack,
                                             void *) { return (CFMachPortRef) nullptr; });
   lizard::app::Config cfg(std::filesystem::temp_directory_path());
-  auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-  REQUIRE_FALSE(hk->start());
+  auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+  REQUIRE_FALSE(hook_instance->start());
 #elif defined(__linux__)
   const char *old_display = std::getenv("DISPLAY");
-  if (old_display) {
+  if (old_display != nullptr) {
     std::string saved = old_display;
     setenv("DISPLAY", "", 1);
     lizard::app::Config cfg(std::filesystem::temp_directory_path());
-    auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-    REQUIRE_FALSE(hk->start());
+    auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+    REQUIRE_FALSE(hook_instance->start());
     setenv("DISPLAY", saved.c_str(), 1);
   } else {
     setenv("DISPLAY", "", 1);
     lizard::app::Config cfg(std::filesystem::temp_directory_path());
-    auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-    REQUIRE_FALSE(hk->start());
+    auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+    REQUIRE_FALSE(hook_instance->start());
     unsetenv("DISPLAY");
   }
 #else
   lizard::app::Config cfg(std::filesystem::temp_directory_path());
-  auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-  REQUIRE_FALSE(hk->start());
+  auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+  REQUIRE_FALSE(hook_instance->start());
 #endif
 }
 
 #if defined(__linux__)
 TEST_CASE("start fails when XRecordAllocRange fails", "[hook]") {
-  if (Display *d = XOpenDisplay(nullptr)) {
-    XCloseDisplay(d);
+  if (Display *display = XOpenDisplay(nullptr)) {
+    XCloseDisplay(display);
     static bool called = false;
     auto failing_alloc = []() -> XRecordRange * {
       called = true;
@@ -83,8 +83,8 @@ TEST_CASE("start fails when XRecordAllocRange fails", "[hook]") {
     };
     hook::testing::set_xrecord_alloc_range(failing_alloc);
     lizard::app::Config cfg(std::filesystem::temp_directory_path());
-    auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-    REQUIRE_FALSE(hk->start());
+    auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+    REQUIRE_FALSE(hook_instance->start());
     REQUIRE(called);
   } else {
     SUCCEED("X display unavailable; skipping test");
@@ -94,11 +94,11 @@ TEST_CASE("start fails when XRecordAllocRange fails", "[hook]") {
 
 TEST_CASE("start and stop succeed without activity", "[hook]") {
   lizard::app::Config cfg(std::filesystem::temp_directory_path());
-  auto hk = hook::KeyboardHook::create([](int, bool) {}, cfg);
-  if (hk->start()) {
+  auto hook_instance = hook::KeyboardHook::create([](int, bool) {}, cfg);
+  if (hook_instance->start()) {
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(10ms);
-    hk->stop();
+    hook_instance->stop();
     SUCCEED();
   } else {
     SUCCEED("start failed; skipping");
@@ -116,4 +116,13 @@ TEST_CASE("config filters injected and excluded processes", "[hook]") {
   REQUIRE_FALSE(hook::should_deliver_event(cfg, false, "badproc"));
   REQUIRE(hook::should_deliver_event(cfg, false, "good"));
   std::filesystem::remove(cfg_file);
+
+  // When ignore_injected is false, injected events are delivered
+  auto cfg_file2 = tempdir / "hook_filter2.json";
+  std::ofstream out2(cfg_file2);
+  out2 << R"({"exclude_processes":[],"ignore_injected":false})";
+  out2.close();
+  lizard::app::Config cfg2(tempdir, cfg_file2);
+  REQUIRE(hook::should_deliver_event(cfg2, true, "whatever"));
+  std::filesystem::remove(cfg_file2);
 }

@@ -12,7 +12,7 @@ namespace hook {
 // settings. `injected` indicates whether the event was synthetically
 // generated. `process_name` is the executable name of the originating
 // process.
-bool should_deliver_event(const lizard::app::Config &cfg, bool injected,
-                          const std::string &process_name);
+auto should_deliver_event(const lizard::app::Config &cfg, bool injected,
+                          const std::string &process_name) -> bool;
 
 } // namespace hook

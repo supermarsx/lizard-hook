@@ -259,18 +259,18 @@ private:
 
 } // namespace
 
-std::unique_ptr<KeyboardHook> KeyboardHook::create(KeyCallback callback,
-                                                   const lizard::app::Config &cfg) {
+auto KeyboardHook::create(KeyCallback callback, const lizard::app::Config &cfg)
+    -> std::unique_ptr<KeyboardHook> {
   return std::make_unique<LinuxKeyboardHook>(std::move(callback), cfg);
 }
 
 #ifdef LIZARD_TEST
 namespace testing {
-void set_xrecord_alloc_range(LinuxKeyboardHook::AllocRangeFn fn) {
-  LinuxKeyboardHook::alloc_range_ = fn;
+void set_xrecord_alloc_range(LinuxKeyboardHook::AllocRangeFn range_fn) {
+  LinuxKeyboardHook::alloc_range_ = range_fn;
 }
-void set_process_name_resolver(LinuxKeyboardHook::ProcessNameFn fn) {
-  LinuxKeyboardHook::process_name_fn_ = fn;
+void set_process_name_resolver(LinuxKeyboardHook::ProcessNameFn resolver_fn) {
+  LinuxKeyboardHook::process_name_fn_ = resolver_fn;
 }
 } // namespace testing
 #endif
