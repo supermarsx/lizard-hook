@@ -54,6 +54,9 @@
   // Logging verbosity ("trace", "debug", "info", "warn", "error", default: "info")
   "logging_level": "info",
 
+  // Log file path (default: config directory)
+  "logging_path": "",
+
   // Asynchronous logging queue size (default: 8192)
   "logging_queue_size": 8192,
 

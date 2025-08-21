@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
   auto workers = result.count("log-workers")
                      ? static_cast<std::size_t>(result["log-workers"].as<int>())
                      : static_cast<std::size_t>(cfg.logging_worker_count());
-  lizard::util::init_logging(level, queue, workers);
+  lizard::util::init_logging(level, queue, workers, cfg.logging_path());
 
   lizard::audio::Engine engine(static_cast<std::uint32_t>(cfg.max_concurrent_playbacks()),
                                std::chrono::milliseconds(cfg.sound_cooldown_ms()));

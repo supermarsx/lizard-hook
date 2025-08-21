@@ -102,6 +102,9 @@ Common options include:
 - `exclude_processes` to ignore specific executables
 - `sound_path` and `emoji_path` for external assets
 - `logging_level` to control verbosity
+- `logging_path` to set the log file location
+
+Invalid `logging_level` values log a warning and fall back to `info`.
 
 Configuration values are loaded from the first location that exists:
 
