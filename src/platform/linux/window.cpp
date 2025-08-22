@@ -118,4 +118,38 @@ void poll_events(Window &window) {
   }
 }
 
+bool fullscreen_window_present() {
+  if (!g_display) {
+    return false;
+  }
+  Atom activeAtom = XInternAtom(g_display, "_NET_ACTIVE_WINDOW", False);
+  Atom type;
+  int format;
+  unsigned long nitems, bytes;
+  unsigned char *data = nullptr;
+  if (XGetWindowProperty(g_display, g_root, activeAtom, 0, ~0L, False, AnyPropertyType, &type,
+                         &format, &nitems, &bytes, &data) != Success ||
+      nitems == 0) {
+    if (data)
+      XFree(data);
+    return false;
+  }
+  ::Window active = *(::Window *)data;
+  XFree(data);
+  if (!active) {
+    return false;
+  }
+  XWindowAttributes attrs;
+  if (!XGetWindowAttributes(g_display, active, &attrs)) {
+    return false;
+  }
+  int screen = DefaultScreen(g_display);
+  int sw = DisplayWidth(g_display, screen);
+  int sh = DisplayHeight(g_display, screen);
+  int x = 0, y = 0;
+  ::Window child;
+  XTranslateCoordinates(g_display, active, g_root, 0, 0, &x, &y, &child);
+  return x == 0 && y == 0 && attrs.width == sw && attrs.height == sh;
+}
+
 } // namespace lizard::platform

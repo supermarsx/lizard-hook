@@ -35,5 +35,6 @@ struct Window {
 Window create_overlay_window(const WindowDesc &desc);
 void destroy_window(Window &window);
 void poll_events(Window &window);
+bool fullscreen_window_present();
 
 } // namespace lizard::platform
