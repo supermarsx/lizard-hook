@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "embedded.h"
 #include <spdlog/spdlog.h>
@@ -68,6 +69,20 @@ std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t 
 }
 } // namespace
 
+void Engine::endpoint_callback(ma_context * /*pContext*/, ma_device_type /*deviceType*/,
+                               ma_endpoint_notification_type /*notificationType*/,
+                               void *pUserData) {
+  auto *self = static_cast<Engine *>(pUserData);
+  if (self == nullptr) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(self->m_mutex);
+  float currentVol = self->m_volume;
+  self->shutdown();
+  self->init(self->m_soundPath, self->m_volumePercent, self->m_backend);
+  self->set_volume(currentVol);
+}
+
 Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
     : m_maxPlaybacks(maxPlaybacks), m_cooldown(cooldown) {}
 
@@ -75,6 +90,10 @@ Engine::~Engine() { shutdown(); }
 
 bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_percent,
                   std::string_view backend) {
+  m_soundPath = sound_path;
+  m_volumePercent = volume_percent;
+  m_backend = std::string(backend);
+
   ma_engine_config engineConfig = ma_engine_config_init();
 
   ma_backend maBackend{};
@@ -100,6 +119,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
     }
     m_contextInitialized = true;
     engineConfig.pContext = &m_context;
+    ma_context_set_endpoint_notification_callback(&m_context, Engine::endpoint_callback, this);
   }
 
   result = ma_engine_init(&engineConfig, &m_engine);
@@ -165,6 +185,7 @@ void Engine::shutdown() {
 }
 
 void Engine::play() {
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto now = std::chrono::steady_clock::now();
   if ((now - m_lastPlay) < m_cooldown) {
     return;
@@ -192,6 +213,7 @@ void Engine::play() {
 
 void Engine::set_volume(float vol) {
   m_volume = std::clamp(vol, 0.0f, 1.0f);
+  m_volumePercent = static_cast<int>(m_volume * 100.0f);
   for (auto &voice : m_voices) {
     ma_sound_set_volume(&voice.sound, m_volume);
   }
