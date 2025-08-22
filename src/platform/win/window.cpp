@@ -97,6 +97,24 @@ void poll_events(Window &window) {
   }
 }
 
+bool fullscreen_window_present() {
+  HWND hwnd = GetForegroundWindow();
+  if (!hwnd || hwnd == g_hwnd) {
+    return false;
+  }
+  RECT rect{};
+  if (!GetWindowRect(hwnd, &rect)) {
+    return false;
+  }
+  HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+  MONITORINFO mi{sizeof(mi)};
+  if (!GetMonitorInfo(mon, &mi)) {
+    return false;
+  }
+  return rect.left <= mi.rcMonitor.left && rect.top <= mi.rcMonitor.top &&
+         rect.right >= mi.rcMonitor.right && rect.bottom >= mi.rcMonitor.bottom;
+}
+
 } // namespace lizard::platform
 
 #endif

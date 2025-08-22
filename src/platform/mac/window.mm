@@ -2,6 +2,7 @@
 
 #ifdef __APPLE__
 #include <Cocoa/Cocoa.h>
+#include <CoreGraphics/CoreGraphics.h>
 
 namespace lizard::platform {
 
@@ -74,6 +75,36 @@ void poll_events(Window &window) {
                                          dequeue:YES])) {
       [NSApp sendEvent:event];
     }
+  }
+}
+
+bool fullscreen_window_present() {
+  @autoreleasepool {
+    CFArrayRef list = CGWindowListCopyWindowInfo(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+    if (!list) {
+      return false;
+    }
+    bool full = false;
+    CFIndex count = CFArrayGetCount(list);
+    for (CFIndex i = 0; i < count; ++i) {
+      NSDictionary *info = (NSDictionary *)CFArrayGetValueAtIndex(list, i);
+      NSNumber *layer = info[(id)kCGWindowLayer];
+      if ([layer intValue] != 0) {
+        continue;
+      }
+      CGRect bounds;
+      CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)info[(id)kCGWindowBounds], &bounds);
+      for (NSScreen *s in [NSScreen screens]) {
+        if (NSEqualRects([s frame], bounds)) {
+          full = true;
+          break;
+        }
+      }
+      break;
+    }
+    CFRelease(list);
+    return full;
   }
 }
 

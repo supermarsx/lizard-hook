@@ -12,6 +12,7 @@
 #include "audio/engine.h"
 #include "hook/keyboard_hook.h"
 #include "platform/tray.hpp"
+#include "platform/window.hpp"
 #include "util/log.h"
 
 #ifndef LIZARD_TEST
@@ -55,6 +56,16 @@ int main(int argc, char **argv) {
   lizard::overlay::Overlay overlay;
   overlay.init(cfg, cfg.emoji_path());
   std::jthread overlay_thread([&](std::stop_token st) { overlay.run(st); });
+  std::atomic<bool> fullscreen{false};
+  std::jthread fullscreen_thread([&](std::stop_token st) {
+    using namespace std::chrono_literals;
+    while (!st.stop_requested()) {
+      bool fs = lizard::platform::fullscreen_window_present();
+      fullscreen = fs;
+      overlay.set_paused(cfg.fullscreen_pause() && fs);
+      std::this_thread::sleep_for(500ms);
+    }
+  });
 
   std::atomic<bool> running{true};
   lizard::platform::TrayState tray_state{cfg.enabled(), cfg.mute(), cfg.fullscreen_pause(), false};
@@ -82,10 +93,13 @@ int main(int argc, char **argv) {
   auto hook = hook::KeyboardHook::create(
       [&](int /*key*/, bool pressed) {
         if (pressed && cfg.enabled()) {
-          if (!cfg.mute()) {
-            engine.play();
+          bool paused = cfg.fullscreen_pause() && fullscreen.load();
+          if (!paused) {
+            if (!cfg.mute()) {
+              engine.play();
+            }
+            overlay.spawn_badge(0, 0.5f, 0.5f);
           }
-          overlay.spawn_badge(0, 0.5f, 0.5f);
         }
       },
       cfg);
@@ -114,6 +128,7 @@ int main(int argc, char **argv) {
   }
 
   reload_thread.request_stop();
+  fullscreen_thread.request_stop();
   overlay_thread.request_stop();
   hook->stop();
   overlay.shutdown();

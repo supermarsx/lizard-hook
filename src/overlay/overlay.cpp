@@ -12,6 +12,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <atomic>
 
 #include <climits>
 #ifdef _WIN32
@@ -85,6 +86,7 @@ public:
   void spawn_badge(int sprite, float x, float y);
   void run(std::stop_token st);
   void stop();
+  void set_paused(bool v) { m_paused = v; }
 
 private:
   friend struct ::OverlayTestAccess;
@@ -108,6 +110,7 @@ private:
   gl::Program m_program;
   bool m_running = false;
   BadgeSpawnStrategy m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
+  std::atomic<bool> m_paused{false};
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
@@ -634,6 +637,12 @@ void Overlay::run(std::stop_token st) {
   const auto frame = std::chrono::milliseconds(16);
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
+    if (m_paused.load()) {
+      std::this_thread::sleep_for(frame);
+      last = clock::now();
+      platform::poll_events(m_window);
+      continue;
+    }
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
