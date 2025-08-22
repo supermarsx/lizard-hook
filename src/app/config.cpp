@@ -147,6 +147,13 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     }
     logging_path_ = j.value("logging_path", logging_path_.string());
 
+    fps_mode_ = j.value("fps_mode", std::string("auto"));
+    fps_fixed_ = clamp_nonneg(j.value("fps_fixed", 60), "fps_fixed");
+    if (fps_fixed_ == 0) {
+      spdlog::warn("fps_fixed zero; clamping to 1");
+      fps_fixed_ = 1;
+    }
+
     if (j.contains("sound_path")) {
       auto path = std::filesystem::path(j.at("sound_path").get<std::string>());
       if (path.empty()) {
@@ -301,6 +308,16 @@ int Config::logging_worker_count() const {
 std::filesystem::path Config::logging_path() const {
   std::shared_lock lock(mutex_);
   return logging_path_;
+}
+
+std::string Config::fps_mode() const {
+  std::shared_lock lock(mutex_);
+  return fps_mode_;
+}
+
+int Config::fps_fixed() const {
+  std::shared_lock lock(mutex_);
+  return fps_fixed_;
 }
 
 } // namespace lizard::app

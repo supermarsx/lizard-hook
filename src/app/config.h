@@ -42,6 +42,8 @@ public:
   int logging_queue_size() const;
   int logging_worker_count() const;
   std::filesystem::path logging_path() const;
+  std::string fps_mode() const;
+  int fps_fixed() const;
 
   std::condition_variable &reload_cv() { return reload_cv_; }
 
@@ -81,6 +83,8 @@ private:
   int logging_queue_size_{8192};
   int logging_worker_count_{1};
   std::filesystem::path logging_path_{};
+  std::string fps_mode_{"auto"};
+  int fps_fixed_{60};
 };
 
 } // namespace lizard::app

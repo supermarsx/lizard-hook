@@ -18,6 +18,9 @@
 #include <windows.h>
 #elif defined(__linux__)
 #include <X11/Xlib.h>
+#ifndef LIZARD_TEST
+#include <X11/extensions/Xrandr.h>
+#endif
 #elif defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
 #endif
@@ -47,6 +50,8 @@ void stbi_image_free(void *);
 #include "app/config.h"
 #include "overlay/gl_raii.h"
 #include <spdlog/spdlog.h>
+
+struct OverlayTestAccess;
 
 #ifdef LIZARD_TEST
 extern bool g_overlay_log_called;
@@ -108,9 +113,51 @@ private:
   gl::Program m_program;
   bool m_running = false;
   BadgeSpawnStrategy m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
+  std::chrono::nanoseconds m_frame_interval{std::chrono::milliseconds(16)};
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
+  int refresh = 60;
+  if (cfg.fps_mode() == "auto") {
+#ifndef LIZARD_TEST
+#ifdef _WIN32
+    DEVMODE dm{};
+    dm.dmSize = sizeof(dm);
+    if (EnumDisplaySettingsEx(nullptr, ENUM_CURRENT_SETTINGS, &dm, 0) &&
+        dm.dmDisplayFrequency > 0) {
+      refresh = static_cast<int>(dm.dmDisplayFrequency);
+    }
+#elif defined(__APPLE__)
+    if (CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID())) {
+      double hz = CGDisplayModeGetRefreshRate(mode);
+      if (hz > 0.0) {
+        refresh = static_cast<int>(hz + 0.5);
+      }
+      CGDisplayModeRelease(mode);
+    }
+#elif defined(__linux__)
+    if (Display *dpy = XOpenDisplay(nullptr)) {
+      Window root = DefaultRootWindow(dpy);
+      if (XRRScreenConfiguration *conf = XRRGetScreenInfo(dpy, root)) {
+        short rate = XRRConfigCurrentRate(conf);
+        if (rate > 0) {
+          refresh = static_cast<int>(rate);
+        }
+        XRRFreeScreenConfigInfo(conf);
+      }
+      XCloseDisplay(dpy);
+    }
+#endif
+#endif
+  } else {
+    refresh = cfg.fps_fixed();
+    if (refresh <= 0) {
+      spdlog::warn("fps_fixed ({}) invalid; using 60", refresh);
+      refresh = 60;
+    }
+  }
+  m_frame_interval = std::chrono::nanoseconds(1'000'000'000LL / std::max(1, refresh));
+
   auto strategy = cfg.badge_spawn_strategy();
   if (strategy == "cursor_follow") {
     m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
@@ -631,7 +678,7 @@ void Overlay::render() {
 void Overlay::run(std::stop_token st) {
 #ifndef LIZARD_TEST
   using clock = std::chrono::steady_clock;
-  const auto frame = std::chrono::milliseconds(16);
+  const auto frame = m_frame_interval;
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
     auto now = clock::now();

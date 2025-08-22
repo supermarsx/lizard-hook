@@ -51,6 +51,13 @@
   // DPI scaling mode (e.g., "per_monitor_v2", default: "per_monitor_v2")
   "dpi_scaling_mode": "per_monitor_v2",
 
+  // Frame rate mode: "auto" matches the monitor's refresh rate,
+  // "fixed" uses the value of `fps_fixed`.
+  "fps_mode": "auto",
+
+  // Fixed frame rate in Hz when `fps_mode` is "fixed" (default: 60)
+  "fps_fixed": 60,
+
   // Logging verbosity ("trace", "debug", "info", "warn", "error", default: "info")
   "logging_level": "info",
 
