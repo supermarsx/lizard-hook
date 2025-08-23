@@ -69,13 +69,18 @@ std::optional<DecodedSample> load_flac_memory(const unsigned char *data, size_t 
 }
 } // namespace
 
-void Engine::endpoint_callback(ma_context * /*pContext*/, ma_device_type /*deviceType*/,
-                               ma_endpoint_notification_type /*notificationType*/,
-                               void *pUserData) {
+void Engine::endpoint_callback(ma_context *, ma_device_type deviceType,
+                               ma_endpoint_notification_type notificationType, void *pUserData) {
+  if (deviceType != ma_device_type_playback ||
+      notificationType != ma_endpoint_notification_type_default_changed) {
+    return;
+  }
+
   auto *self = static_cast<Engine *>(pUserData);
   if (self == nullptr) {
     return;
   }
+
   std::lock_guard<std::mutex> lock(self->m_mutex);
   float currentVol = self->m_volume;
   self->shutdown();
