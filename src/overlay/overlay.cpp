@@ -8,6 +8,7 @@
 #include <fstream>
 #include <optional>
 #include <random>
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -69,10 +70,15 @@ struct Sprite {
 struct Badge {
   float x;
   float y;
+  float vx;
+  float vy;
   float scale;
   float alpha;
+  float rotation;
   float time;
   float lifetime;
+  float fade_in;
+  float fade_out;
   int sprite;
 };
 
@@ -108,6 +114,7 @@ private:
   platform::Window m_window{};
   std::vector<Badge> m_badges;
   std::size_t m_badge_capacity = 0;
+  bool m_badge_suppressed = false;
   std::vector<float> m_instanceData;
   std::vector<Sprite> m_sprites;
   std::unordered_map<std::string, int> m_sprite_lookup;
@@ -461,10 +468,9 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   }
   m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
 
-  auto badge_capacity = std::max(1, cfg.badges_per_second_max());
-  m_badge_capacity = static_cast<std::size_t>(badge_capacity);
+  m_badge_capacity = 150;
   m_badges.reserve(m_badge_capacity);
-  m_instanceData.reserve(m_badge_capacity * 9);
+  m_instanceData.reserve(m_badge_capacity * 10);
 
   if (!m_sprites.empty()) {
     spawn_badge(select_sprite(), 0.0f, 0.0f);
@@ -486,22 +492,25 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
 
   m_instance.create();
   glBindBuffer(GL_ARRAY_BUFFER, m_instance.id);
-  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 9, nullptr, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 1000 * sizeof(float) * 10, nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)0);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)0);
   glVertexAttribDivisor(2, 1);
   glEnableVertexAttribArray(3);
-  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)(2 * sizeof(float)));
   glVertexAttribDivisor(3, 1);
   glEnableVertexAttribArray(4);
-  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(4 * sizeof(float)));
+  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)(4 * sizeof(float)));
   glVertexAttribDivisor(4, 1);
   glEnableVertexAttribArray(5);
-  glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(5 * sizeof(float)));
+  glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)(5 * sizeof(float)));
   glVertexAttribDivisor(5, 1);
   glEnableVertexAttribArray(6);
-  glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(7 * sizeof(float)));
+  glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)(6 * sizeof(float)));
   glVertexAttribDivisor(6, 1);
+  glEnableVertexAttribArray(7);
+  glVertexAttribPointer(7, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(float), (void *)(8 * sizeof(float)));
+  glVertexAttribDivisor(7, 1);
 
   const char *vs = R"GLSL(
       #version 330 core
@@ -509,13 +518,17 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
       layout(location=1) in vec2 inUV;
       layout(location=2) in vec2 iPos;
       layout(location=3) in vec2 iScale;
-      layout(location=4) in float iAlpha;
-      layout(location=5) in vec2 iUV0;
-      layout(location=6) in vec2 iUV1;
+      layout(location=4) in float iRot;
+      layout(location=5) in float iAlpha;
+      layout(location=6) in vec2 iUV0;
+      layout(location=7) in vec2 iUV1;
       out vec2 uv;
       out float alpha;
       void main(){
-        vec2 pos = inPos * iScale + iPos;
+        vec2 pos = inPos * iScale;
+        float c = cos(iRot);
+        float s = sin(iRot);
+        pos = vec2(pos.x * c - pos.y * s, pos.x * s + pos.y * c) + iPos;
         gl_Position = vec4(pos,0.0,1.0);
         uv = mix(iUV0, iUV1, inUV);
         alpha = iAlpha;
@@ -633,6 +646,21 @@ int Overlay::select_sprite() {
 }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
+  if (m_badge_suppressed) {
+    if (m_badges.size() < 80) {
+      m_badge_suppressed = false;
+    } else {
+      return;
+    }
+  }
+  if (m_badges.size() >= m_badge_capacity) {
+    if (!m_badges.empty()) {
+      m_badges.erase(m_badges.begin());
+    }
+    m_badge_suppressed = true;
+    return;
+  }
+
   float px = x;
   float py = y;
   if (m_spawn_strategy == BadgeSpawnStrategy::RandomScreen) {
@@ -640,24 +668,55 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
     px = dist(m_rng);
     py = dist(m_rng);
   }
-  if (m_badges.size() >= m_badge_capacity && !m_badges.empty()) {
-    m_badges.erase(m_badges.begin());
-  }
-  m_badges.emplace_back(Badge{px, py, 0.1f, 1.0f, 0.0f, 1.0f, sprite});
+
+  std::uniform_real_distribution<float> angleDist(-0.3f, 0.3f);
+  std::uniform_real_distribution<float> speedDist(0.15f, 0.3f);
+  float angle = angleDist(m_rng);
+  float speed = speedDist(m_rng);
+  float vx = std::sin(angle) * speed;
+  float vy = std::cos(angle) * speed;
+
+  std::uniform_real_distribution<float> scaleDist(0.08f, 0.15f);
+  float scale = scaleDist(m_rng);
+
+  std::uniform_real_distribution<float> rotDist(-5.0f, 5.0f);
+  float rotation = rotDist(m_rng) * 3.14159265f / 180.0f;
+
+  std::uniform_real_distribution<float> lifeDist(0.7f, 1.2f);
+  std::uniform_real_distribution<float> fadeInDist(0.06f, 0.12f);
+  std::uniform_real_distribution<float> fadeOutDist(0.2f, 0.6f);
+  float lifetime = lifeDist(m_rng);
+  float fade_in = fadeInDist(m_rng);
+  float fade_out = fadeOutDist(m_rng);
+
+  m_badges.emplace_back(
+      Badge{px, py, vx, vy, scale, 0.0f, rotation, 0.0f, lifetime, fade_in, fade_out, sprite});
 }
 
 void Overlay::stop() { m_running = false; }
 
 void Overlay::update(float dt) {
+  std::uniform_real_distribution<float> noise(-0.01f, 0.01f);
   for (auto &b : m_badges) {
     b.time += dt;
-    float t = b.time / b.lifetime;
-    b.alpha = 1.0f - t;
-    b.scale = 0.1f + 0.1f * t;
+    b.x += (b.vx + noise(m_rng)) * dt;
+    b.y += (b.vy + noise(m_rng)) * dt;
+    if (b.time < b.fade_in) {
+      float p = b.time / b.fade_in;
+      b.alpha = p * p * (3.0f - 2.0f * p);
+    } else if (b.time > b.lifetime - b.fade_out) {
+      float p = (b.time - (b.lifetime - b.fade_out)) / b.fade_out;
+      b.alpha = 1.0f - (p * p * (3.0f - 2.0f * p));
+    } else {
+      b.alpha = 1.0f;
+    }
   }
   m_badges.erase(std::remove_if(m_badges.begin(), m_badges.end(),
                                 [](const Badge &b) { return b.time >= b.lifetime; }),
                  m_badges.end());
+  if (m_badge_suppressed && m_badges.size() < 80) {
+    m_badge_suppressed = false;
+  }
 }
 
 void Overlay::render() {
@@ -669,8 +728,8 @@ void Overlay::render() {
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   m_instanceData.clear();
-  if (m_instanceData.capacity() < m_badges.size() * 9) {
-    m_instanceData.reserve(m_badges.size() * 9);
+  if (m_instanceData.capacity() < m_badges.size() * 10) {
+    m_instanceData.reserve(m_badges.size() * 10);
   }
   for (const auto &b : m_badges) {
     const Sprite &s = m_sprites[b.sprite];
@@ -678,6 +737,7 @@ void Overlay::render() {
     m_instanceData.push_back(b.y);
     m_instanceData.push_back(b.scale);
     m_instanceData.push_back(b.scale);
+    m_instanceData.push_back(b.rotation);
     m_instanceData.push_back(b.alpha);
     m_instanceData.push_back(s.u0);
     m_instanceData.push_back(s.v0);
