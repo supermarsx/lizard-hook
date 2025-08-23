@@ -21,11 +21,13 @@ namespace lizard::audio {
 
 class Engine {
 public:
-  Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown);
+  Engine(std::uint32_t maxPlaybacks = 16,
+         std::chrono::milliseconds cooldown = std::chrono::milliseconds(150));
   ~Engine();
 
   bool init(std::optional<std::filesystem::path> sound_path = std::nullopt,
-            int volume_percent = 100, std::string_view backend = "miniaudio");
+            int volume_percent = 100, std::string_view backend = "miniaudio",
+            std::uint32_t maxPlaybacks = 0);
   void shutdown();
   void play();
   void set_volume(float vol);

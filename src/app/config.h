@@ -24,8 +24,9 @@ public:
   bool mute() const;
   std::vector<std::string> emoji() const;
   std::unordered_map<std::string, double> emoji_weighted() const;
+  std::vector<std::string> emoji_pngs() const;
   std::optional<std::filesystem::path> sound_path() const;
-  std::optional<std::filesystem::path> emoji_path() const;
+  std::optional<std::filesystem::path> emoji_atlas() const;
   int sound_cooldown_ms() const;
   int max_concurrent_playbacks() const;
   int badges_per_second_max() const;
@@ -64,14 +65,15 @@ private:
   bool enabled_{true};
   bool mute_{false};
   int sound_cooldown_ms_{150};
-  int max_concurrent_playbacks_{4};
+  int max_concurrent_playbacks_{16};
   int badges_per_second_max_{12};
   int badge_min_px_{60};
   int badge_max_px_{108};
   std::vector<std::string> emoji_{"\U0001F98E"};
   std::unordered_map<std::string, double> emoji_weighted_{};
+  std::vector<std::string> emoji_pngs_{};
   std::optional<std::filesystem::path> sound_path_{};
-  std::optional<std::filesystem::path> emoji_path_{};
+  std::optional<std::filesystem::path> emoji_atlas_{};
   bool fullscreen_pause_{true};
   std::vector<std::string> exclude_processes_{};
   bool ignore_injected_{true};
