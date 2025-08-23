@@ -4,6 +4,8 @@
 #include "glad/glad.h"
 #include <dwmapi.h>
 #include <windows.h>
+#include <algorithm>
+#include <vector>
 #pragma comment(lib, "dwmapi.lib")
 
 namespace lizard::platform {
@@ -98,21 +100,47 @@ void poll_events(Window &window) {
 }
 
 bool fullscreen_window_present() {
-  HWND hwnd = GetForegroundWindow();
-  if (!hwnd || hwnd == g_hwnd) {
-    return false;
-  }
-  RECT rect{};
-  if (!GetWindowRect(hwnd, &rect)) {
-    return false;
-  }
-  HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
-  MONITORINFO mi{sizeof(mi)};
-  if (!GetMonitorInfo(mon, &mi)) {
-    return false;
-  }
-  return rect.left <= mi.rcMonitor.left && rect.top <= mi.rcMonitor.top &&
-         rect.right >= mi.rcMonitor.right && rect.bottom >= mi.rcMonitor.bottom;
+  struct EnumData {
+    bool full = false;
+    std::vector<HMONITOR> seen;
+  } data;
+
+  EnumWindows(
+      [](HWND hwnd, LPARAM lparam) -> BOOL {
+        auto *d = reinterpret_cast<EnumData *>(lparam);
+        if (d->full) {
+          return FALSE;
+        }
+        if (hwnd == g_hwnd || !IsWindowVisible(hwnd)) {
+          return TRUE;
+        }
+        HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+        if (!mon) {
+          return TRUE;
+        }
+        if (std::find(d->seen.begin(), d->seen.end(), mon) != d->seen.end()) {
+          return TRUE;
+        }
+        d->seen.push_back(mon);
+        RECT rect{};
+        if (!GetWindowRect(hwnd, &rect)) {
+          return TRUE;
+        }
+        MONITORINFO mi{sizeof(mi)};
+        if (!GetMonitorInfo(mon, &mi)) {
+          return TRUE;
+        }
+        if (rect.left <= mi.rcMonitor.left && rect.top <= mi.rcMonitor.top &&
+            rect.right >= mi.rcMonitor.right &&
+            rect.bottom >= mi.rcMonitor.bottom) {
+          d->full = true;
+          return FALSE;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&data));
+
+  return data.full;
 }
 
 } // namespace lizard::platform

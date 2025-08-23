@@ -3,6 +3,8 @@
 #ifdef __APPLE__
 #include <Cocoa/Cocoa.h>
 #include <CoreGraphics/CoreGraphics.h>
+#include <algorithm>
+#include <vector>
 
 namespace lizard::platform {
 
@@ -86,8 +88,9 @@ bool fullscreen_window_present() {
       return false;
     }
     bool full = false;
+    std::vector<NSScreen *> seen;
     CFIndex count = CFArrayGetCount(list);
-    for (CFIndex i = 0; i < count; ++i) {
+    for (CFIndex i = 0; i < count && !full; ++i) {
       NSDictionary *info = (NSDictionary *)CFArrayGetValueAtIndex(list, i);
       NSNumber *layer = info[(id)kCGWindowLayer];
       if ([layer intValue] != 0) {
@@ -96,12 +99,18 @@ bool fullscreen_window_present() {
       CGRect bounds;
       CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)info[(id)kCGWindowBounds], &bounds);
       for (NSScreen *s in [NSScreen screens]) {
+        if (std::find(seen.begin(), seen.end(), s) != seen.end()) {
+          continue;
+        }
         if (NSEqualRects([s frame], bounds)) {
           full = true;
           break;
         }
+        if (NSIntersectsRect([s frame], bounds)) {
+          seen.push_back(s);
+          break;
+        }
       }
-      break;
     }
     CFRelease(list);
     return full;
