@@ -68,26 +68,36 @@ int main(int argc, char **argv) {
   });
 
   std::atomic<bool> running{true};
-  lizard::platform::TrayState tray_state{cfg.enabled(), cfg.mute(), cfg.fullscreen_pause(), false};
-  lizard::platform::TrayCallbacks tray_callbacks{[&](bool v) {
-                                                   tray_state.enabled = v;
-                                                   lizard::platform::update_tray(tray_state);
-                                                 },
-                                                 [&](bool v) {
-                                                   tray_state.muted = v;
-                                                   lizard::platform::update_tray(tray_state);
-                                                 },
-                                                 [&](bool v) {
-                                                   tray_state.fullscreen_pause = v;
-                                                   lizard::platform::update_tray(tray_state);
-                                                 },
-                                                 [&](bool v) {
-                                                   tray_state.show_fps = v;
-                                                   lizard::platform::update_tray(tray_state);
-                                                 },
-                                                 []() {},
-                                                 []() {},
-                                                 [&]() { running = false; }};
+  lizard::platform::TrayState tray_state{cfg.enabled(), cfg.mute(), cfg.fullscreen_pause(),
+                                         lizard::platform::FpsMode::Auto, 60};
+  lizard::platform::TrayCallbacks tray_callbacks{
+      [&](bool v) {
+        tray_state.enabled = v;
+        lizard::platform::update_tray(tray_state);
+      },
+      [&](bool v) {
+        tray_state.muted = v;
+        lizard::platform::update_tray(tray_state);
+      },
+      [&](bool v) {
+        tray_state.fullscreen_pause = v;
+        lizard::platform::update_tray(tray_state);
+      },
+      [&](lizard::platform::FpsMode m) {
+        tray_state.fps_mode = m;
+        overlay.set_fps_mode(m);
+        lizard::platform::update_tray(tray_state);
+      },
+      [&](int v) {
+        tray_state.fps_mode = lizard::platform::FpsMode::Fixed;
+        tray_state.fps_fixed = v;
+        overlay.set_fps_mode(lizard::platform::FpsMode::Fixed);
+        overlay.set_fps_fixed(v);
+        lizard::platform::update_tray(tray_state);
+      },
+      []() {},
+      []() {},
+      [&]() { running = false; }};
   lizard::platform::init_tray(tray_state, tray_callbacks);
 
   auto hook = hook::KeyboardHook::create(

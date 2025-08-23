@@ -1,4 +1,5 @@
 #include "platform/window.hpp"
+#include "platform/tray.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -87,6 +88,8 @@ public:
   void run(std::stop_token st);
   void stop();
   void set_paused(bool v) { m_paused = v; }
+  void set_fps_mode(platform::FpsMode mode) { m_fps_mode = mode; }
+  void set_fps_fixed(int fps) { m_fps_fixed = fps; }
 
 private:
   friend struct ::OverlayTestAccess;
@@ -111,6 +114,8 @@ private:
   bool m_running = false;
   BadgeSpawnStrategy m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
   std::atomic<bool> m_paused{false};
+  platform::FpsMode m_fps_mode = platform::FpsMode::Auto;
+  int m_fps_fixed = 60;
 };
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
@@ -634,9 +639,12 @@ void Overlay::render() {
 void Overlay::run(std::stop_token st) {
 #ifndef LIZARD_TEST
   using clock = std::chrono::steady_clock;
-  const auto frame = std::chrono::milliseconds(16);
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
+    auto frame = std::chrono::milliseconds(16);
+    if (m_fps_mode == platform::FpsMode::Fixed && m_fps_fixed > 0) {
+      frame = std::chrono::milliseconds(1000 / m_fps_fixed);
+    }
     if (m_paused.load()) {
       std::this_thread::sleep_for(frame);
       last = clock::now();
