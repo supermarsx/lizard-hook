@@ -62,10 +62,21 @@ int main(int argc, char **argv) {
   std::atomic<bool> fullscreen{false};
   std::jthread fullscreen_thread([&](std::stop_token st) {
     using namespace std::chrono_literals;
+    bool last = false;
     while (!st.stop_requested()) {
       bool fs = lizard::platform::fullscreen_window_present();
       fullscreen = fs;
-      overlay.set_paused(cfg.fullscreen_pause() && fs);
+      bool paused = cfg.fullscreen_pause() && fs;
+      overlay.set_paused(paused);
+      if (paused != last) {
+        if (paused) {
+          engine.set_volume(0.0f);
+        } else {
+          engine.set_volume(cfg.mute() ? 0.0f
+                                      : static_cast<float>(cfg.volume_percent()) / 100.0f);
+        }
+        last = paused;
+      }
       std::this_thread::sleep_for(500ms);
     }
   });

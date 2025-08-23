@@ -1,11 +1,12 @@
+#include "glad/glad.h"
 #include "../window.hpp"
 
-#include "glad/glad.h"
-#include <GL/glx.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/shape.h>
+#include <X11/extensions/Xrandr.h>
+#include <vector>
 
 namespace lizard::platform {
 
@@ -13,8 +14,9 @@ namespace {
 
 Display *g_display = nullptr;
 ::Window g_root = 0;
+::Window g_overlay = 0;
 
-float compute_dpi(Display *dpy, ::Window win) {
+float compute_dpi(Display *dpy) {
   int screen = DefaultScreen(dpy);
   int width_px = DisplayWidth(dpy, screen);
   int width_mm = DisplayWidthMM(dpy, screen);
@@ -41,6 +43,7 @@ Window create_overlay_window(const WindowDesc &desc) {
   ::Window win = XCreateWindow(g_display, g_root, desc.x, desc.y, desc.width, desc.height, 0,
                                CopyFromParent, InputOutput, CopyFromParent,
                                CWOverrideRedirect | CWEventMask | CWBackPixel, &attrs);
+  g_overlay = win;
 
   XMapRaised(g_display, win);
 
@@ -89,7 +92,7 @@ Window create_overlay_window(const WindowDesc &desc) {
   gladLoadGL();
 
   result.native = (void *)win;
-  result.dpiScale = compute_dpi(g_display, win);
+  result.dpiScale = compute_dpi(g_display);
   result.glContext = ctx;
   return result;
 }
@@ -122,34 +125,71 @@ bool fullscreen_window_present() {
   if (!g_display) {
     return false;
   }
-  Atom activeAtom = XInternAtom(g_display, "_NET_ACTIVE_WINDOW", False);
+  Atom listAtom = XInternAtom(g_display, "_NET_CLIENT_LIST_STACKING", False);
   Atom type;
   int format;
   unsigned long nitems, bytes;
   unsigned char *data = nullptr;
-  if (XGetWindowProperty(g_display, g_root, activeAtom, 0, ~0L, False, AnyPropertyType, &type,
-                         &format, &nitems, &bytes, &data) != Success ||
-      nitems == 0) {
+  if (XGetWindowProperty(g_display, g_root, listAtom, 0, ~0L, False, XA_WINDOW, &type,
+                         &format, &nitems, &bytes, &data) != Success || !data) {
     if (data)
       XFree(data);
     return false;
   }
-  ::Window active = *(::Window *)data;
+  std::vector<::Window> stack(reinterpret_cast<::Window *>(data),
+                              reinterpret_cast<::Window *>(data) + nitems);
   XFree(data);
-  if (!active) {
-    return false;
+
+  int nmon = 0;
+  XRRMonitorInfo *mons = XRRGetMonitors(g_display, g_root, True, &nmon);
+  struct Mon {
+    int x, y, w, h;
+  };
+  std::vector<Mon> monitors;
+  std::vector<bool> seen;
+  if (mons && nmon > 0) {
+    for (int i = 0; i < nmon; ++i) {
+      monitors.push_back({mons[i].x, mons[i].y, mons[i].width, mons[i].height});
+    }
+    seen.resize(monitors.size(), false);
+  } else {
+    int screen = DefaultScreen(g_display);
+    monitors.push_back({0, 0, DisplayWidth(g_display, screen), DisplayHeight(g_display, screen)});
+    seen.resize(1, false);
   }
-  XWindowAttributes attrs;
-  if (!XGetWindowAttributes(g_display, active, &attrs)) {
-    return false;
+  if (mons)
+    XRRFreeMonitors(mons);
+
+  bool full = false;
+  for (auto it = stack.rbegin(); it != stack.rend() && !full; ++it) {
+    ::Window win = *it;
+    if (win == g_overlay) {
+      continue;
+    }
+    XWindowAttributes attrs;
+    if (!XGetWindowAttributes(g_display, win, &attrs) || attrs.map_state != IsViewable) {
+      continue;
+    }
+    int wx = 0, wy = 0;
+    ::Window child;
+    XTranslateCoordinates(g_display, win, g_root, 0, 0, &wx, &wy, &child);
+    for (std::size_t i = 0; i < monitors.size(); ++i) {
+      if (seen[i]) {
+        continue;
+      }
+      auto &m = monitors[i];
+      if (wx <= m.x && wy <= m.y && wx + attrs.width >= m.x + m.w &&
+          wy + attrs.height >= m.y + m.h) {
+        full = true;
+        break;
+      }
+      if (wx < m.x + m.w && wx + attrs.width > m.x && wy < m.y + m.h &&
+          wy + attrs.height > m.y) {
+        seen[i] = true;
+      }
+    }
   }
-  int screen = DefaultScreen(g_display);
-  int sw = DisplayWidth(g_display, screen);
-  int sh = DisplayHeight(g_display, screen);
-  int x = 0, y = 0;
-  ::Window child;
-  XTranslateCoordinates(g_display, active, g_root, 0, 0, &x, &y, &child);
-  return x == 0 && y == 0 && attrs.width == sw && attrs.height == sh;
+  return full;
 }
 
 } // namespace lizard::platform
