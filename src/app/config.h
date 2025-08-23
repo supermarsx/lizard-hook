@@ -36,6 +36,8 @@ public:
   bool ignore_injected() const;
   std::string audio_backend() const;
   std::string badge_spawn_strategy() const;
+  std::string fps_mode() const;
+  int fps_fixed() const;
   int volume_percent() const;
   std::string dpi_scaling_mode() const;
   std::string logging_level() const;
@@ -75,6 +77,8 @@ private:
   bool ignore_injected_{true};
   std::string audio_backend_{"miniaudio"};
   std::string badge_spawn_strategy_{"random_screen"};
+  std::string fps_mode_{"auto"};
+  int fps_fixed_{60};
   int volume_percent_{65};
   std::string dpi_scaling_mode_{"per_monitor_v2"};
   std::string logging_level_{"info"};

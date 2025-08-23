@@ -128,6 +128,12 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     ignore_injected_ = j.value("ignore_injected", true);
     audio_backend_ = j.value("audio_backend", std::string("miniaudio"));
     badge_spawn_strategy_ = j.value("badge_spawn_strategy", std::string("random_screen"));
+    fps_mode_ = j.value("fps_mode", std::string("auto"));
+    fps_fixed_ = clamp_nonneg(j.value("fps_fixed", 60), "fps_fixed");
+    if (fps_fixed_ <= 0) {
+      spdlog::warn("fps_fixed non-positive ({}); using 60", fps_fixed_);
+      fps_fixed_ = 60;
+    }
 
     int volume_in = j.value("volume_percent", 65);
     volume_percent_ = clamp_nonneg(volume_in, "volume_percent");
@@ -271,6 +277,16 @@ std::string Config::audio_backend() const {
 std::string Config::badge_spawn_strategy() const {
   std::shared_lock lock(mutex_);
   return badge_spawn_strategy_;
+}
+
+std::string Config::fps_mode() const {
+  std::shared_lock lock(mutex_);
+  return fps_mode_;
+}
+
+int Config::fps_fixed() const {
+  std::shared_lock lock(mutex_);
+  return fps_fixed_;
 }
 
 int Config::volume_percent() const {

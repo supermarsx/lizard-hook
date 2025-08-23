@@ -20,6 +20,7 @@
 #include <windows.h>
 #elif defined(__linux__)
 #include <X11/Xlib.h>
+#include <X11/extensions/Xrandr.h>
 #elif defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
 #endif
@@ -88,14 +89,21 @@ public:
   void run(std::stop_token st);
   void stop();
   void set_paused(bool v) { m_paused = v; }
-  void set_fps_mode(platform::FpsMode mode) { m_fps_mode = mode; }
-  void set_fps_fixed(int fps) { m_fps_fixed = fps; }
+  void set_fps_mode(platform::FpsMode mode) {
+    m_fps_mode = mode;
+    update_frame_interval();
+  }
+  void set_fps_fixed(int fps) {
+    m_fps_fixed = fps;
+    update_frame_interval();
+  }
 
 private:
   friend struct ::OverlayTestAccess;
   int select_sprite();
   void update(float dt);
   void render();
+  void update_frame_interval();
 
   platform::Window m_window{};
   std::vector<Badge> m_badges;
@@ -116,7 +124,51 @@ private:
   std::atomic<bool> m_paused{false};
   platform::FpsMode m_fps_mode = platform::FpsMode::Auto;
   int m_fps_fixed = 60;
+  std::chrono::milliseconds m_frame_interval{std::chrono::milliseconds(1000 / 60)};
 };
+
+void Overlay::update_frame_interval() {
+  int refresh = 60;
+  if (m_fps_mode == platform::FpsMode::Fixed && m_fps_fixed > 0) {
+    refresh = m_fps_fixed;
+  } else {
+#ifdef _WIN32
+    DEVMODE dm{};
+    dm.dmSize = sizeof(dm);
+    if (EnumDisplaySettingsEx(nullptr, ENUM_CURRENT_SETTINGS, &dm, 0) &&
+        dm.dmDisplayFrequency > 0) {
+      refresh = dm.dmDisplayFrequency;
+    }
+#elif defined(__APPLE__)
+    auto mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
+    if (mode) {
+      double rate = CGDisplayModeGetRefreshRate(mode);
+      if (rate > 0.0) {
+        refresh = static_cast<int>(rate + 0.5);
+      }
+      CGDisplayModeRelease(mode);
+    }
+#elif defined(__linux__)
+    Display *dpy = XOpenDisplay(nullptr);
+    if (dpy) {
+      Window root = DefaultRootWindow(dpy);
+      XRRScreenConfiguration *conf = XRRGetScreenInfo(dpy, root);
+      if (conf) {
+        short rate = XRRConfigCurrentRate(conf);
+        if (rate > 0) {
+          refresh = rate;
+        }
+        XRRFreeScreenConfigInfo(conf);
+      }
+      XCloseDisplay(dpy);
+    }
+#endif
+  }
+  if (refresh <= 0) {
+    refresh = 60;
+  }
+  m_frame_interval = std::chrono::milliseconds(1000 / refresh);
+}
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
   auto strategy = cfg.badge_spawn_strategy();
@@ -125,6 +177,13 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   } else {
     m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
   }
+  if (cfg.fps_mode() == "fixed") {
+    m_fps_mode = platform::FpsMode::Fixed;
+    m_fps_fixed = cfg.fps_fixed();
+  } else {
+    m_fps_mode = platform::FpsMode::Auto;
+  }
+  update_frame_interval();
 #ifdef LIZARD_TEST
   if (emoji_path && emoji_path->extension() == ".png") {
     int w, h, channels;
@@ -641,10 +700,7 @@ void Overlay::run(std::stop_token st) {
   using clock = std::chrono::steady_clock;
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
-    auto frame = std::chrono::milliseconds(16);
-    if (m_fps_mode == platform::FpsMode::Fixed && m_fps_fixed > 0) {
-      frame = std::chrono::milliseconds(1000 / m_fps_fixed);
-    }
+    auto frame = m_frame_interval;
     if (m_paused.load()) {
       std::this_thread::sleep_for(frame);
       last = clock::now();
