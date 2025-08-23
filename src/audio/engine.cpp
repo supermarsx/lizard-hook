@@ -79,7 +79,7 @@ void Engine::endpoint_callback(ma_context * /*pContext*/, ma_device_type /*devic
   std::lock_guard<std::mutex> lock(self->m_mutex);
   float currentVol = self->m_volume;
   self->shutdown();
-  self->init(self->m_soundPath, self->m_volumePercent, self->m_backend);
+  self->init(self->m_soundPath, self->m_volumePercent, self->m_backend, self->m_maxPlaybacks);
   self->set_volume(currentVol);
 }
 
@@ -89,7 +89,10 @@ Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
 Engine::~Engine() { shutdown(); }
 
 bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_percent,
-                  std::string_view backend) {
+                  std::string_view backend, std::uint32_t maxPlaybacks) {
+  if (maxPlaybacks > 0) {
+    m_maxPlaybacks = maxPlaybacks;
+  }
   m_soundPath = sound_path;
   m_volumePercent = volume_percent;
   m_backend = std::string(backend);

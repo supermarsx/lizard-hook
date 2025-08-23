@@ -53,10 +53,11 @@ int main(int argc, char **argv) {
 
   lizard::audio::Engine engine(static_cast<std::uint32_t>(cfg.max_concurrent_playbacks()),
                                std::chrono::milliseconds(cfg.sound_cooldown_ms()));
-  engine.init(cfg.sound_path(), cfg.volume_percent(), cfg.audio_backend());
+  engine.init(cfg.sound_path(), cfg.volume_percent(), cfg.audio_backend(),
+              static_cast<std::uint32_t>(cfg.max_concurrent_playbacks()));
 
   lizard::overlay::Overlay overlay;
-  overlay.init(cfg, cfg.emoji_path());
+  overlay.init(cfg, cfg.emoji_atlas());
   std::jthread overlay_thread([&](std::stop_token st) { overlay.run(st); });
   std::atomic<bool> fullscreen{false};
   std::jthread fullscreen_thread([&](std::stop_token st) {

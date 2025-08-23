@@ -113,7 +113,7 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
 
     sound_cooldown_ms_ = clamp_nonneg(j.value("sound_cooldown_ms", 150), "sound_cooldown_ms");
     max_concurrent_playbacks_ =
-        clamp_nonneg(j.value("max_concurrent_playbacks", 4), "max_concurrent_playbacks");
+        clamp_nonneg(j.value("max_concurrent_playbacks", 16), "max_concurrent_playbacks");
     badges_per_second_max_ =
         clamp_nonneg(j.value("badges_per_second_max", 12), "badges_per_second_max");
     badge_min_px_ = clamp_nonneg(j.value("badge_min_px", 60), "badge_min_px");
@@ -167,21 +167,26 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
       sound_path_ = std::nullopt;
     }
 
-    if (j.contains("emoji_path")) {
-      auto path = std::filesystem::path(j.at("emoji_path").get<std::string>());
+    if (j.contains("emoji_atlas")) {
+      auto path = std::filesystem::path(j.at("emoji_atlas").get<std::string>());
       if (path.empty()) {
-        emoji_path_ = std::nullopt;
+        emoji_atlas_ = std::nullopt;
       } else {
         if (!path.is_absolute()) {
           path = config_path_.parent_path() / path;
         }
-        emoji_path_ = std::move(path);
+        emoji_atlas_ = std::move(path);
       }
     } else {
-      emoji_path_ = std::nullopt;
+      emoji_atlas_ = std::nullopt;
     }
 
-    if (j.contains("emoji_weighted")) {
+    emoji_pngs_ = j.value("emoji_pngs", std::vector<std::string>{});
+
+    if (!emoji_pngs_.empty()) {
+      emoji_.clear();
+      emoji_weighted_.clear();
+    } else if (j.contains("emoji_weighted")) {
       emoji_weighted_.clear();
       for (auto &[k, v] : j.at("emoji_weighted").items()) {
         emoji_weighted_[k] = v.get<double>();
@@ -219,14 +224,19 @@ std::unordered_map<std::string, double> Config::emoji_weighted() const {
   return emoji_weighted_;
 }
 
+std::vector<std::string> Config::emoji_pngs() const {
+  std::shared_lock lock(mutex_);
+  return emoji_pngs_;
+}
+
 std::optional<std::filesystem::path> Config::sound_path() const {
   std::shared_lock lock(mutex_);
   return sound_path_;
 }
 
-std::optional<std::filesystem::path> Config::emoji_path() const {
+std::optional<std::filesystem::path> Config::emoji_atlas() const {
   std::shared_lock lock(mutex_);
-  return emoji_path_;
+  return emoji_atlas_;
 }
 
 int Config::sound_cooldown_ms() const {

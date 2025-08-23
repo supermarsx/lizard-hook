@@ -43,12 +43,28 @@ TEST_CASE("parses asset paths", "[config]") {
   auto tempdir = std::filesystem::temp_directory_path();
   auto cfg_file = tempdir / "lizard_cfg_paths.json";
   std::ofstream out(cfg_file);
-  out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+  out << R"({"sound_path":"custom.flac","emoji_atlas":"custom.png"})";
   out.close();
 
   Config cfg(tempdir, cfg_file);
   REQUIRE(cfg.sound_path().has_value());
-  REQUIRE(cfg.emoji_path().has_value());
+  REQUIRE(cfg.emoji_atlas().has_value());
+
+  std::filesystem::remove(cfg_file);
+}
+
+TEST_CASE("parses emoji_pngs", "[config]") {
+  auto tempdir = std::filesystem::temp_directory_path();
+  auto cfg_file = tempdir / "lizard_cfg_pngs.json";
+  std::ofstream out(cfg_file);
+  out << R"({"emoji_pngs":["lizard","snake"]})";
+  out.close();
+
+  Config cfg(tempdir, cfg_file);
+  REQUIRE(cfg.emoji_pngs().size() == 2);
+  REQUIRE(cfg.emoji_pngs()[0] == "lizard");
+  REQUIRE(cfg.emoji().empty());
+  REQUIRE(cfg.emoji_weighted().empty());
 
   std::filesystem::remove(cfg_file);
 }
@@ -59,14 +75,14 @@ TEST_CASE("resolves relative asset paths", "[config]") {
   auto cfg_file = tempdir / "lizard_cfg_rel.json";
   {
     std::ofstream out(cfg_file);
-    out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+    out << R"({"sound_path":"custom.flac","emoji_atlas":"custom.png"})";
   }
 
   Config cfg(tempdir, cfg_file);
   REQUIRE(cfg.sound_path().has_value());
-  REQUIRE(cfg.emoji_path().has_value());
+  REQUIRE(cfg.emoji_atlas().has_value());
   REQUIRE(cfg.sound_path().value() == tempdir / "custom.flac");
-  REQUIRE(cfg.emoji_path().value() == tempdir / "custom.png");
+  REQUIRE(cfg.emoji_atlas().value() == tempdir / "custom.png");
 
   std::filesystem::remove(cfg_file);
   std::filesystem::remove_all(tempdir);
@@ -79,12 +95,12 @@ TEST_CASE("asset paths reset when removed or empty", "[config]") {
 
   {
     std::ofstream out(cfg_file);
-    out << R"({"sound_path":"custom.flac","emoji_path":"custom.png"})";
+    out << R"({"sound_path":"custom.flac","emoji_atlas":"custom.png"})";
   }
 
   Config cfg(tempdir, cfg_file, 10ms);
   REQUIRE(cfg.sound_path().has_value());
-  REQUIRE(cfg.emoji_path().has_value());
+  REQUIRE(cfg.emoji_atlas().has_value());
 
   auto bump = [&] {
     auto ts = std::filesystem::last_write_time(cfg_file);
@@ -99,20 +115,20 @@ TEST_CASE("asset paths reset when removed or empty", "[config]") {
 
   {
     std::ofstream out(cfg_file);
-    out << R"({"sound_path":"","emoji_path":""})";
+    out << R"({"sound_path":"","emoji_atlas":""})";
   }
   bump();
-  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_path().has_value(); }));
+  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_atlas().has_value(); }));
 
   {
     std::ofstream out(cfg_file);
     out << R"({})";
   }
   bump();
-  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_path().has_value(); }));
+  REQUIRE(wait([&] { return !cfg.sound_path().has_value() && !cfg.emoji_atlas().has_value(); }));
 
   REQUIRE_FALSE(cfg.sound_path().has_value());
-  REQUIRE_FALSE(cfg.emoji_path().has_value());
+  REQUIRE_FALSE(cfg.emoji_atlas().has_value());
 
   std::filesystem::remove(cfg_file);
 }
