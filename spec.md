@@ -90,7 +90,7 @@ Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs)
 ## 8) Audio Playback
 
 * **Default**: miniaudio (WASAPI shared), decoded PCM cached in RAM.
-* Low latency play calls; allow overlap (polyphony) up to `max_concurrent_playbacks` (default 4).
+* Low latency play calls; allow overlap (polyphony) up to `max_concurrent_playbacks` (default 16).
 * **Debounce** using `sound_cooldown_ms`.
 * **Volume** 0–100% (default 65%).
 * If device changes, auto-reinit.
@@ -108,7 +108,7 @@ Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs)
   * `enabled` (bool, default true)
   * `mute` (bool, default false)
   * `sound_cooldown_ms` (int, default 150)
-  * `max_concurrent_playbacks` (int, default 4)
+  * `max_concurrent_playbacks` (int, default 16)
   * `badges_per_second_max` (int, default 12)
   * `badge_min_px` / `badge_max_px` (int, default 60/108)
   * `emoji`: array of strings (default `["🦎"]`)
