@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <thread>
+#include <iostream>
 
 #include <cxxopts.hpp>
 #include <spdlog/spdlog.h>
@@ -16,6 +17,7 @@
 #include "util/log.h"
 
 #ifndef LIZARD_TEST
+#include "glad/glad.h"
 #include "overlay/gl_raii.cpp"
 #include "overlay/overlay.cpp"
 #endif
