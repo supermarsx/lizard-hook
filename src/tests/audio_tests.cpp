@@ -21,17 +21,17 @@ struct AudioTestAccess {
 using namespace std::chrono_literals;
 
 TEST_CASE("max_concurrent_playbacks respected", "[audio]") {
-  lizard::audio::Engine eng(2, 0ms);
-  AudioTestAccess::voices(eng).resize(2);
+  lizard::audio::Engine eng;
+  AudioTestAccess::voices(eng).resize(16);
 
   g_start_calls = 0;
   g_stop_calls = 0;
 
-  eng.play();
-  eng.play();
-  eng.play();
+  for (int i = 0; i < 17; ++i) {
+    eng.play();
+  }
 
-  REQUIRE(g_start_calls == 3);
+  REQUIRE(g_start_calls == 17);
   REQUIRE(g_stop_calls == 1);
 
   int playing = 0;
@@ -40,7 +40,7 @@ TEST_CASE("max_concurrent_playbacks respected", "[audio]") {
       playing++;
     }
   }
-  REQUIRE(playing == 2);
+  REQUIRE(playing == 16);
 }
 
 TEST_CASE("cooldown prevents rapid retriggers", "[audio]") {

@@ -8,8 +8,8 @@
   // Minimum milliseconds between sound plays (default: 150)
   "sound_cooldown_ms": 150,
 
-  // Maximum simultaneous sound playbacks (default: 4)
-  "max_concurrent_playbacks": 4,
+  // Maximum simultaneous sound playbacks (default: 16)
+  "max_concurrent_playbacks": 16,
 
   // Limit on badge spawns per second and maximum badges visible at once
   // (oldest badges are dropped when exceeded, default: 12)
