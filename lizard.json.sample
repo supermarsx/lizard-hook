@@ -45,6 +45,13 @@
   // Strategy for placing badges ("random_screen" or other future strategies)
   "badge_spawn_strategy": "random_screen",
 
+  // Frame timing: "auto" uses the display refresh rate; "fixed" uses the
+  // `fps_fixed` value below (default: "auto")
+  "fps_mode": "auto",
+
+  // FPS value when using "fixed" mode (default: 60)
+  "fps_fixed": 60,
+
   // Output volume as a percentage (0-100, default: 65)
   "volume_percent": 65,
 
