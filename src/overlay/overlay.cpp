@@ -131,7 +131,7 @@ private:
   std::atomic<bool> m_paused{false};
   platform::FpsMode m_fps_mode = platform::FpsMode::Auto;
   int m_fps_fixed = 60;
-  std::chrono::milliseconds m_frame_interval{std::chrono::milliseconds(1000 / 60)};
+  std::atomic<std::int64_t> m_frame_interval_us{1000000 / 60};
 };
 
 void Overlay::update_frame_interval() {
@@ -174,7 +174,7 @@ void Overlay::update_frame_interval() {
   if (refresh <= 0) {
     refresh = 60;
   }
-  m_frame_interval = std::chrono::milliseconds(1000 / refresh);
+  m_frame_interval_us = 1000000 / refresh;
 }
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
@@ -760,7 +760,7 @@ void Overlay::run(std::stop_token st) {
   using clock = std::chrono::steady_clock;
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
-    auto frame = m_frame_interval;
+    auto frame = std::chrono::microseconds(m_frame_interval_us.load());
     if (m_paused.load()) {
       std::this_thread::sleep_for(frame);
       last = clock::now();
