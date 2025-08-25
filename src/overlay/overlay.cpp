@@ -72,6 +72,7 @@ struct Badge {
   float y;
   float vx;
   float vy;
+  float phase;
   float scale;
   float alpha;
   float rotation;
@@ -115,6 +116,10 @@ private:
   std::vector<Badge> m_badges;
   std::size_t m_badge_capacity = 0;
   bool m_badge_suppressed = false;
+  int m_badge_min_px = 60;
+  int m_badge_max_px = 108;
+  float m_view_width = 1.0f;
+  float m_view_height = 1.0f;
   std::vector<float> m_instanceData;
   std::vector<Sprite> m_sprites;
   std::unordered_map<std::string, int> m_sprite_lookup;
@@ -190,6 +195,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   } else {
     m_fps_mode = platform::FpsMode::Auto;
   }
+  m_badge_min_px = cfg.badge_min_px();
+  m_badge_max_px = cfg.badge_max_px();
   update_frame_interval();
 #ifdef LIZARD_TEST
   if (emoji_path && emoji_path->extension() == ".png") {
@@ -348,6 +355,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   desc.width = 800;
   desc.height = 600;
 #endif
+  m_view_width = static_cast<float>(desc.width);
+  m_view_height = static_cast<float>(desc.height);
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
     return false;
@@ -647,16 +656,13 @@ int Overlay::select_sprite() {
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
   if (m_badge_suppressed) {
-    if (m_badges.size() < 80) {
+    if (m_badges.size() < static_cast<std::size_t>(m_badge_capacity * 0.8f)) {
       m_badge_suppressed = false;
     } else {
       return;
     }
   }
   if (m_badges.size() >= m_badge_capacity) {
-    if (!m_badges.empty()) {
-      m_badges.erase(m_badges.begin());
-    }
     m_badge_suppressed = true;
     return;
   }
@@ -676,8 +682,13 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   float vx = std::sin(angle) * speed;
   float vy = std::cos(angle) * speed;
 
-  std::uniform_real_distribution<float> scaleDist(0.08f, 0.15f);
-  float scale = scaleDist(m_rng);
+  std::uniform_real_distribution<float> phaseDist(0.0f, 6.2831853f);
+  float phase = phaseDist(m_rng);
+
+  std::uniform_real_distribution<float> diaDist(static_cast<float>(m_badge_min_px),
+                                                static_cast<float>(m_badge_max_px));
+  float diameter = diaDist(m_rng);
+  float scale = (diameter * 2.0f) / m_view_height;
 
   std::uniform_real_distribution<float> rotDist(-5.0f, 5.0f);
   float rotation = rotDist(m_rng) * 3.14159265f / 180.0f;
@@ -689,24 +700,27 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   float fade_in = fadeInDist(m_rng);
   float fade_out = fadeOutDist(m_rng);
 
-  m_badges.emplace_back(
-      Badge{px, py, vx, vy, scale, 0.0f, rotation, 0.0f, lifetime, fade_in, fade_out, sprite});
+  m_badges.emplace_back(Badge{px, py, vx, vy, phase, scale, 0.0f, rotation, 0.0f, lifetime, fade_in,
+                              fade_out, sprite});
 }
 
 void Overlay::stop() { m_running = false; }
 
 void Overlay::update(float dt) {
-  std::uniform_real_distribution<float> noise(-0.01f, 0.01f);
+  auto cubicOut = [](float t) { return 1.0f - std::pow(1.0f - t, 3.0f); };
   for (auto &b : m_badges) {
     b.time += dt;
-    b.x += (b.vx + noise(m_rng)) * dt;
-    b.y += (b.vy + noise(m_rng)) * dt;
+    float nx = std::sin(b.time * 6.2831853f + b.phase) * 0.02f;
+    float ny = std::cos(b.time * 6.2831853f + b.phase) * 0.02f;
+    b.x += (b.vx + nx) * dt;
+    b.y += (b.vy + ny) * dt;
     if (b.time < b.fade_in) {
       float p = b.time / b.fade_in;
-      b.alpha = p * p * (3.0f - 2.0f * p);
+      b.alpha = cubicOut(p);
     } else if (b.time > b.lifetime - b.fade_out) {
-      float p = (b.time - (b.lifetime - b.fade_out)) / b.fade_out;
-      b.alpha = 1.0f - (p * p * (3.0f - 2.0f * p));
+      float p = (b.lifetime - b.time) / b.fade_out;
+      p = std::clamp(p, 0.0f, 1.0f);
+      b.alpha = cubicOut(p);
     } else {
       b.alpha = 1.0f;
     }
@@ -714,7 +728,7 @@ void Overlay::update(float dt) {
   m_badges.erase(std::remove_if(m_badges.begin(), m_badges.end(),
                                 [](const Badge &b) { return b.time >= b.lifetime; }),
                  m_badges.end());
-  if (m_badge_suppressed && m_badges.size() < 80) {
+  if (m_badge_suppressed && m_badges.size() < static_cast<std::size_t>(m_badge_capacity * 0.8f)) {
     m_badge_suppressed = false;
   }
 }
