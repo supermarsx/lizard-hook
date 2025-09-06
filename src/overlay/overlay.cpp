@@ -1,3 +1,19 @@
+// glad must be included before any platform window headers to ensure modern
+// OpenGL symbols like glBindBuffer are declared. Even in test builds we include
+// it so GL types are available.
+#include "glad/glad.h"
+#ifndef LIZARD_TEST
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#else
+extern "C" {
+unsigned char *stbi_load(const char *, int *, int *, int *, int);
+unsigned char *stbi_load_from_memory(const unsigned char *, int, int *, int *, int *, int);
+const char *stbi_failure_reason(void);
+void stbi_image_free(void *);
+}
+#endif
+
 #include "platform/window.hpp"
 #include "platform/tray.hpp"
 
@@ -24,19 +40,6 @@
 #include <X11/extensions/Xrandr.h>
 #elif defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
-#endif
-
-#ifndef LIZARD_TEST
-#include "glad/glad.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#else
-extern "C" {
-unsigned char *stbi_load(const char *, int *, int *, int *, int);
-unsigned char *stbi_load_from_memory(const unsigned char *, int, int *, int *, int *, int);
-const char *stbi_failure_reason(void);
-void stbi_image_free(void *);
-}
 #endif
 
 #ifdef __APPLE__
