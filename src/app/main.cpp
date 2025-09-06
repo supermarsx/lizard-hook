@@ -164,40 +164,46 @@ int main(int argc, char **argv) {
         } else if (key == KEY_F9) {
           if (!pressed) {
             f9_down = false;
-          } else {
-            if (!f9_down && ctrl_down && shift_down) {
+          } else if (ctrl_down && shift_down) {
+            if (!f9_down) {
               f9_down = true;
               enabled = !enabled.load();
               tray_state.enabled = enabled.load();
               update_state();
               lizard::platform::update_tray(tray_state);
-              return;
             }
+            f9_down = true;
+            return;
+          } else {
             f9_down = true;
           }
         } else if (key == KEY_F10) {
           if (!pressed) {
             f10_down = false;
-          } else {
-            if (!f10_down && ctrl_down && shift_down) {
+          } else if (ctrl_down && shift_down) {
+            if (!f10_down) {
               f10_down = true;
               muted = !muted.load();
               tray_state.muted = muted.load();
               update_state();
               lizard::platform::update_tray(tray_state);
-              return;
             }
+            f10_down = true;
+            return;
+          } else {
             f10_down = true;
           }
         } else if (key == KEY_F11) {
           if (!pressed) {
             f11_down = false;
-          } else {
-            if (!f11_down && ctrl_down && shift_down) {
+          } else if (ctrl_down && shift_down) {
+            if (!f11_down) {
               f11_down = true;
               cfg.reload_cv().notify_all();
-              return;
             }
+            f11_down = true;
+            return;
+          } else {
             f11_down = true;
           }
         }
