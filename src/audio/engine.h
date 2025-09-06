@@ -33,6 +33,8 @@ public:
   void set_volume(float vol);
 
 private:
+  void set_volume_locked(float vol);
+
   struct Voice {
     ma_sound sound{};
     std::chrono::steady_clock::time_point start{};

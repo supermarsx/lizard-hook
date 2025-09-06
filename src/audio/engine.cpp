@@ -85,7 +85,7 @@ void Engine::endpoint_callback(ma_context *, ma_device_type deviceType,
   float currentVol = self->m_volume;
   self->shutdown();
   self->init(self->m_soundPath, self->m_volumePercent, self->m_backend, self->m_maxPlaybacks);
-  self->set_volume(currentVol);
+  self->set_volume_locked(currentVol);
 }
 
 Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
@@ -175,7 +175,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
     ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
   }
   int clampedPercent = std::clamp(volume_percent, 0, 100);
-  set_volume(static_cast<float>(clampedPercent) / 100.0f);
+  set_volume_locked(static_cast<float>(clampedPercent) / 100.0f);
   return true;
 }
 
@@ -220,6 +220,11 @@ void Engine::play() {
 }
 
 void Engine::set_volume(float vol) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  set_volume_locked(vol);
+}
+
+void Engine::set_volume_locked(float vol) {
   m_volume = std::clamp(vol, 0.0f, 1.0f);
   m_volumePercent = static_cast<int>(m_volume * 100.0f);
   for (auto &voice : m_voices) {
