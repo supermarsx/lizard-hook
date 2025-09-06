@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
   std::atomic<bool> fullscreen{false};
   std::atomic<bool> enabled{cfg.enabled()};
   std::atomic<bool> muted{cfg.mute()};
-  lizard::platform::TrayState tray_state{enabled.load(), muted.load(), cfg.fullscreen_pause(),
+  std::atomic<bool> fullscreen_pause{cfg.fullscreen_pause()};
+  lizard::platform::TrayState tray_state{enabled.load(), muted.load(), fullscreen_pause.load(),
                                          lizard::platform::FpsMode::Auto, 60};
 
 #ifdef _WIN32
@@ -93,7 +94,7 @@ int main(int argc, char **argv) {
 
   auto update_state = [&] {
     bool fs = fullscreen.load();
-    bool paused = (!enabled.load()) || (tray_state.fullscreen_pause && fs);
+    bool paused = (!enabled.load()) || (fullscreen_pause.load() && fs);
     overlay.set_paused(paused);
     if (paused || muted.load()) {
       engine.set_volume(0.0f);
@@ -127,6 +128,7 @@ int main(int argc, char **argv) {
         lizard::platform::update_tray(tray_state);
       },
       [&](bool v) {
+        fullscreen_pause = v;
         tray_state.fullscreen_pause = v;
         update_state();
         lizard::platform::update_tray(tray_state);
@@ -180,7 +182,7 @@ int main(int argc, char **argv) {
         }
 
         if (pressed && enabled.load()) {
-          bool paused = cfg.fullscreen_pause() && fullscreen.load();
+          bool paused = fullscreen_pause.load() && fullscreen.load();
           if (!paused) {
             if (!muted.load()) {
               engine.play();
@@ -207,6 +209,7 @@ int main(int argc, char **argv) {
       tray_state.fullscreen_pause = cfg.fullscreen_pause();
       enabled = tray_state.enabled;
       muted = tray_state.muted;
+      fullscreen_pause = tray_state.fullscreen_pause;
       lizard::platform::update_tray(tray_state);
       update_state();
     }
