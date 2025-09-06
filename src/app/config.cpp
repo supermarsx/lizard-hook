@@ -64,6 +64,14 @@ Config::~Config() {
   cv_.notify_all();
 }
 
+void Config::reload() {
+  std::unique_lock lock(mutex_);
+  load(lock);
+  if (std::filesystem::exists(config_path_)) {
+    last_write_ = std::filesystem::last_write_time(config_path_);
+  }
+}
+
 std::filesystem::path Config::user_config_path() {
 #ifdef _WIN32
   if (auto *local = std::getenv("LOCALAPPDATA")) {
