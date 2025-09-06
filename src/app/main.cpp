@@ -152,32 +152,59 @@ int main(int argc, char **argv) {
 
   bool ctrl_down = false;
   bool shift_down = false;
+  bool f9_down = false;
+  bool f10_down = false;
+  bool f11_down = false;
   auto hook = hook::KeyboardHook::create(
       [&](int key, bool pressed) {
         if (key == KEY_CTRL_L || key == KEY_CTRL_R) {
           ctrl_down = pressed;
         } else if (key == KEY_SHIFT_L || key == KEY_SHIFT_R) {
           shift_down = pressed;
-        }
-
-        if (pressed && ctrl_down && shift_down) {
-          if (key == KEY_F9) {
-            enabled = !enabled.load();
-            tray_state.enabled = enabled.load();
-            update_state();
-            lizard::platform::update_tray(tray_state);
+        } else if (key == KEY_F9) {
+          if (!pressed) {
+            f9_down = false;
+          } else if (ctrl_down && shift_down) {
+            if (!f9_down) {
+              f9_down = true;
+              enabled = !enabled.load();
+              tray_state.enabled = enabled.load();
+              update_state();
+              lizard::platform::update_tray(tray_state);
+            }
+            f9_down = true;
             return;
+          } else {
+            f9_down = true;
           }
-          if (key == KEY_F10) {
-            muted = !muted.load();
-            tray_state.muted = muted.load();
-            update_state();
-            lizard::platform::update_tray(tray_state);
+        } else if (key == KEY_F10) {
+          if (!pressed) {
+            f10_down = false;
+          } else if (ctrl_down && shift_down) {
+            if (!f10_down) {
+              f10_down = true;
+              muted = !muted.load();
+              tray_state.muted = muted.load();
+              update_state();
+              lizard::platform::update_tray(tray_state);
+            }
+            f10_down = true;
             return;
+          } else {
+            f10_down = true;
           }
-          if (key == KEY_F11) {
-            cfg.reload_cv().notify_all();
+        } else if (key == KEY_F11) {
+          if (!pressed) {
+            f11_down = false;
+          } else if (ctrl_down && shift_down) {
+            if (!f11_down) {
+              f11_down = true;
+              cfg.reload_cv().notify_all();
+            }
+            f11_down = true;
             return;
+          } else {
+            f11_down = true;
           }
         }
 
