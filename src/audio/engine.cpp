@@ -175,7 +175,7 @@ bool Engine::init(std::optional<std::filesystem::path> sound_path, int volume_pe
     ma_sound_init_from_data_source(&m_engine, &m_buffer, 0, nullptr, &voice.sound);
   }
   int clampedPercent = std::clamp(volume_percent, 0, 100);
-  set_volume(static_cast<float>(clampedPercent) / 100.0f);
+  set_volume_locked(static_cast<float>(clampedPercent) / 100.0f);
   return true;
 }
 
