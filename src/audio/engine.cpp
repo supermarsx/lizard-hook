@@ -220,6 +220,7 @@ void Engine::play() {
 }
 
 void Engine::set_volume(float vol) {
+  std::lock_guard<std::mutex> lock(m_mutex);
   m_volume = std::clamp(vol, 0.0f, 1.0f);
   m_volumePercent = static_cast<int>(m_volume * 100.0f);
   for (auto &voice : m_voices) {
