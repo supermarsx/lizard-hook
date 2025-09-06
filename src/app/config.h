@@ -46,6 +46,7 @@ public:
   int logging_worker_count() const;
   std::filesystem::path logging_path() const;
 
+  void reload();
   std::condition_variable &reload_cv() { return reload_cv_; }
 
 private:

@@ -199,6 +199,7 @@ int main(int argc, char **argv) {
           } else if (ctrl_down && shift_down) {
             if (!f11_down) {
               f11_down = true;
+              cfg.reload();
               cfg.reload_cv().notify_all();
             }
             f11_down = true;
