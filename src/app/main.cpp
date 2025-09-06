@@ -60,41 +60,75 @@ int main(int argc, char **argv) {
   overlay.init(cfg, cfg.emoji_atlas());
   std::jthread overlay_thread([&](std::stop_token st) { overlay.run(st); });
   std::atomic<bool> fullscreen{false};
+  std::atomic<bool> enabled{cfg.enabled()};
+  std::atomic<bool> muted{cfg.mute()};
+  lizard::platform::TrayState tray_state{enabled.load(), muted.load(), cfg.fullscreen_pause(),
+                                         lizard::platform::FpsMode::Auto, 60};
+
+#ifdef _WIN32
+  constexpr int KEY_CTRL_L = 0xA2;
+  constexpr int KEY_CTRL_R = 0xA3;
+  constexpr int KEY_SHIFT_L = 0xA0;
+  constexpr int KEY_SHIFT_R = 0xA1;
+  constexpr int KEY_F9 = 0x78;
+  constexpr int KEY_F10 = 0x79;
+  constexpr int KEY_F11 = 0x7A;
+#elif defined(__APPLE__)
+  constexpr int KEY_CTRL_L = 59;
+  constexpr int KEY_CTRL_R = 62;
+  constexpr int KEY_SHIFT_L = 56;
+  constexpr int KEY_SHIFT_R = 60;
+  constexpr int KEY_F9 = 101;
+  constexpr int KEY_F10 = 109;
+  constexpr int KEY_F11 = 103;
+#else
+  constexpr int KEY_CTRL_L = 37;
+  constexpr int KEY_CTRL_R = 105;
+  constexpr int KEY_SHIFT_L = 50;
+  constexpr int KEY_SHIFT_R = 62;
+  constexpr int KEY_F9 = 75;
+  constexpr int KEY_F10 = 76;
+  constexpr int KEY_F11 = 95;
+#endif
+
+  auto update_state = [&] {
+    bool fs = fullscreen.load();
+    bool paused = (!enabled.load()) || (tray_state.fullscreen_pause && fs);
+    overlay.set_paused(paused);
+    if (paused || muted.load()) {
+      engine.set_volume(0.0f);
+    } else {
+      engine.set_volume(static_cast<float>(cfg.volume_percent()) / 100.0f);
+    }
+  };
+
+  update_state();
   std::jthread fullscreen_thread([&](std::stop_token st) {
     using namespace std::chrono_literals;
-    bool last = false;
     while (!st.stop_requested()) {
-      bool fs = lizard::platform::fullscreen_window_present();
-      fullscreen = fs;
-      bool paused = cfg.fullscreen_pause() && fs;
-      overlay.set_paused(paused);
-      if (paused != last) {
-        if (paused) {
-          engine.set_volume(0.0f);
-        } else {
-          engine.set_volume(cfg.mute() ? 0.0f
-                                      : static_cast<float>(cfg.volume_percent()) / 100.0f);
-        }
-        last = paused;
-      }
+      fullscreen = lizard::platform::fullscreen_window_present();
+      update_state();
       std::this_thread::sleep_for(500ms);
     }
   });
 
   std::atomic<bool> running{true};
-  lizard::platform::TrayState tray_state{cfg.enabled(), cfg.mute(), cfg.fullscreen_pause(),
-                                         lizard::platform::FpsMode::Auto, 60};
   lizard::platform::TrayCallbacks tray_callbacks{
       [&](bool v) {
+        enabled = v;
         tray_state.enabled = v;
+        update_state();
         lizard::platform::update_tray(tray_state);
       },
       [&](bool v) {
+        muted = v;
         tray_state.muted = v;
+        update_state();
         lizard::platform::update_tray(tray_state);
       },
       [&](bool v) {
         tray_state.fullscreen_pause = v;
+        update_state();
         lizard::platform::update_tray(tray_state);
       },
       [&](lizard::platform::FpsMode m) {
@@ -114,12 +148,41 @@ int main(int argc, char **argv) {
       [&]() { running = false; }};
   lizard::platform::init_tray(tray_state, tray_callbacks);
 
+  bool ctrl_down = false;
+  bool shift_down = false;
   auto hook = hook::KeyboardHook::create(
-      [&](int /*key*/, bool pressed) {
-        if (pressed && cfg.enabled()) {
+      [&](int key, bool pressed) {
+        if (key == KEY_CTRL_L || key == KEY_CTRL_R) {
+          ctrl_down = pressed;
+        } else if (key == KEY_SHIFT_L || key == KEY_SHIFT_R) {
+          shift_down = pressed;
+        }
+
+        if (pressed && ctrl_down && shift_down) {
+          if (key == KEY_F9) {
+            enabled = !enabled.load();
+            tray_state.enabled = enabled.load();
+            update_state();
+            lizard::platform::update_tray(tray_state);
+            return;
+          }
+          if (key == KEY_F10) {
+            muted = !muted.load();
+            tray_state.muted = muted.load();
+            update_state();
+            lizard::platform::update_tray(tray_state);
+            return;
+          }
+          if (key == KEY_F11) {
+            cfg.reload_cv().notify_all();
+            return;
+          }
+        }
+
+        if (pressed && enabled.load()) {
           bool paused = cfg.fullscreen_pause() && fullscreen.load();
           if (!paused) {
-            if (!cfg.mute()) {
+            if (!muted.load()) {
               engine.play();
             }
             overlay.spawn_badge(0, 0.5f, 0.5f);
@@ -142,7 +205,10 @@ int main(int argc, char **argv) {
       tray_state.enabled = cfg.enabled();
       tray_state.muted = cfg.mute();
       tray_state.fullscreen_pause = cfg.fullscreen_pause();
+      enabled = tray_state.enabled;
+      muted = tray_state.muted;
       lizard::platform::update_tray(tray_state);
+      update_state();
     }
   });
 
