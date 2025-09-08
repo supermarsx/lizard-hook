@@ -29,8 +29,12 @@ float compute_dpi(Display *dpy) {
 
 } // namespace
 
-Window create_overlay_window(const WindowDesc &desc) {
+void init_xlib_threads() {
   std::call_once(g_xlib_init_once, []() { XInitThreads(); });
+}
+
+Window create_overlay_window(const WindowDesc &desc) {
+  init_xlib_threads();
   Window result{};
   std::lock_guard<std::mutex> lock(g_display_mutex);
   g_display = XOpenDisplay(nullptr);
