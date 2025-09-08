@@ -2,6 +2,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <cstdlib>
 #include <optional>
 #include <thread>
 #include <iostream>
@@ -15,6 +16,11 @@
 #include "platform/tray.hpp"
 #include "platform/window.hpp"
 #include "util/log.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 #ifndef LIZARD_TEST
 #include "glad/glad.h"
@@ -145,8 +151,37 @@ int main(int argc, char **argv) {
         overlay.set_fps_fixed(v);
         lizard::platform::update_tray(tray_state);
       },
-      []() {},
-      []() {},
+      [&]() {
+        auto path = cfg.user_config_path();
+        if (!std::filesystem::exists(path)) {
+          path = cfg.logging_path().parent_path() / "lizard.json";
+        }
+#ifdef _WIN32
+        std::wstring w = path.wstring();
+        ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+#ifdef __APPLE__
+        std::string cmd = "open \"" + path.string() + "\"";
+#else
+        std::string cmd = "xdg-open \"" + path.string() + "\"";
+#endif
+        std::system(cmd.c_str());
+#endif
+      },
+      [&]() {
+        auto path = cfg.logging_path();
+#ifdef _WIN32
+        std::wstring w = path.wstring();
+        ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+#ifdef __APPLE__
+        std::string cmd = "open \"" + path.string() + "\"";
+#else
+        std::string cmd = "xdg-open \"" + path.string() + "\"";
+#endif
+        std::system(cmd.c_str());
+#endif
+      },
       [&]() { running = false; }};
   lizard::platform::init_tray(tray_state, tray_callbacks);
 
