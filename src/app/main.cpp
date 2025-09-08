@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
         lizard::platform::update_tray(tray_state);
       },
       [&]() {
-        auto path = cfg.user_config_path();
+        auto path = cfg.logging_path().parent_path() / "lizard.json";
         if (!std::filesystem::exists(path)) {
           path = cfg.logging_path().parent_path() / "lizard.json";
         }
@@ -165,7 +165,8 @@ int main(int argc, char **argv) {
 #else
         std::string cmd = "xdg-open \"" + path.string() + "\"";
 #endif
-        std::system(cmd.c_str());
+        int rc = std::system(cmd.c_str());
+        (void)rc;
 #endif
       },
       [&]() {
@@ -179,7 +180,8 @@ int main(int argc, char **argv) {
 #else
         std::string cmd = "xdg-open \"" + path.string() + "\"";
 #endif
-        std::system(cmd.c_str());
+        int rc2 = std::system(cmd.c_str());
+        (void)rc2;
 #endif
       },
       [&]() { running = false; }};
@@ -250,7 +252,14 @@ int main(int argc, char **argv) {
             if (!muted.load()) {
               engine.play();
             }
-            overlay.spawn_badge(0, 0.5f, 0.5f);
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (cfg.badge_spawn_strategy() == "cursor_follow") {
+              auto [cx, cy] = lizard::platform::cursor_pos();
+              bx = cx;
+              by = cy;
+            }
+            overlay.spawn_badge(bx, by);
           }
         }
       },

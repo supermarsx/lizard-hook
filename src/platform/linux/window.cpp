@@ -121,6 +121,26 @@ void poll_events(Window &window) {
   }
 }
 
+std::pair<float, float> cursor_pos() {
+  if (!g_display) {
+    return {0.5f, 0.5f};
+  }
+  ::Window root_return, child;
+  int root_x = 0, root_y = 0;
+  int win_x = 0, win_y = 0;
+  unsigned int mask = 0;
+  if (!XQueryPointer(g_display, g_root, &root_return, &child, &root_x, &root_y, &win_x, &win_y,
+                     &mask)) {
+    return {0.5f, 0.5f};
+  }
+  int screen = DefaultScreen(g_display);
+  float w = static_cast<float>(DisplayWidth(g_display, screen));
+  float h = static_cast<float>(DisplayHeight(g_display, screen));
+  float x = w > 0.0f ? static_cast<float>(root_x) / w : 0.0f;
+  float y = h > 0.0f ? static_cast<float>(root_y) / h : 0.0f;
+  return {x, y};
+}
+
 bool fullscreen_window_present() {
   if (!g_display) {
     return false;
@@ -130,8 +150,9 @@ bool fullscreen_window_present() {
   int format;
   unsigned long nitems, bytes;
   unsigned char *data = nullptr;
-  if (XGetWindowProperty(g_display, g_root, listAtom, 0, ~0L, False, XA_WINDOW, &type,
-                         &format, &nitems, &bytes, &data) != Success || !data) {
+  if (XGetWindowProperty(g_display, g_root, listAtom, 0, ~0L, False, XA_WINDOW, &type, &format,
+                         &nitems, &bytes, &data) != Success ||
+      !data) {
     if (data)
       XFree(data);
     return false;
@@ -183,8 +204,7 @@ bool fullscreen_window_present() {
         full = true;
         break;
       }
-      if (wx < m.x + m.w && wx + attrs.width > m.x && wy < m.y + m.h &&
-          wy + attrs.height > m.y) {
+      if (wx < m.x + m.w && wx + attrs.width > m.x && wy < m.y + m.h && wy + attrs.height > m.y) {
         seen[i] = true;
       }
     }

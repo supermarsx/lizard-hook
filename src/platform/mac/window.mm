@@ -80,6 +80,17 @@ void poll_events(Window &window) {
   }
 }
 
+std::pair<float, float> cursor_pos() {
+  @autoreleasepool {
+    CGPoint p = [NSEvent mouseLocation];
+    NSScreen *s = [NSScreen mainScreen];
+    NSRect frame = [s frame];
+    float x = (p.x - frame.origin.x) / frame.size.width;
+    float y = (p.y - frame.origin.y) / frame.size.height;
+    return {x, y};
+  }
+}
+
 bool fullscreen_window_present() {
   @autoreleasepool {
     CFArrayRef list = CGWindowListCopyWindowInfo(
