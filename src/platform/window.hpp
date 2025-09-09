@@ -38,5 +38,8 @@ void destroy_window(Window &window);
 void poll_events(Window &window);
 bool fullscreen_window_present();
 std::pair<float, float> cursor_pos();
+#if defined(__linux__)
+void init_xlib_threads();
+#endif
 
 } // namespace lizard::platform

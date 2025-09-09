@@ -167,6 +167,7 @@ void Overlay::update_frame_interval() {
       CGDisplayModeRelease(mode);
     }
 #elif defined(__linux__)
+    platform::init_xlib_threads();
     Display *dpy = XOpenDisplay(nullptr);
     if (dpy) {
       Window root = DefaultRootWindow(dpy);
@@ -342,6 +343,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     desc.height = 600;
   }
 #elif defined(__linux__)
+  platform::init_xlib_threads();
   if (Display *dpy = XOpenDisplay(nullptr)) {
     int screen = DefaultScreen(dpy);
     desc.x = 0;

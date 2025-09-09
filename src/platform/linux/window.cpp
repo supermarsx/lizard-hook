@@ -7,6 +7,7 @@
 #include <X11/extensions/shape.h>
 #include <X11/extensions/Xrandr.h>
 #include <vector>
+#include <mutex>
 
 namespace lizard::platform {
 
@@ -15,6 +16,8 @@ namespace {
 Display *g_display = nullptr;
 ::Window g_root = 0;
 ::Window g_overlay = 0;
+std::mutex g_display_mutex;
+std::once_flag g_xlib_init_once;
 
 float compute_dpi(Display *dpy) {
   int screen = DefaultScreen(dpy);
@@ -26,8 +29,14 @@ float compute_dpi(Display *dpy) {
 
 } // namespace
 
+void init_xlib_threads() {
+  std::call_once(g_xlib_init_once, []() { XInitThreads(); });
+}
+
 Window create_overlay_window(const WindowDesc &desc) {
+  init_xlib_threads();
   Window result{};
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   g_display = XOpenDisplay(nullptr);
   if (!g_display) {
     return result;
@@ -98,6 +107,7 @@ Window create_overlay_window(const WindowDesc &desc) {
 }
 
 void destroy_window(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (g_display && window.native) {
     glXMakeCurrent(g_display, None, nullptr);
     if (window.glContext) {
@@ -112,6 +122,7 @@ void destroy_window(Window &window) {
 }
 
 void poll_events(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (!g_display || !window.native) {
     return;
   }
@@ -122,6 +133,7 @@ void poll_events(Window &window) {
 }
 
 std::pair<float, float> cursor_pos() {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (!g_display) {
     return {0.5f, 0.5f};
   }
@@ -142,6 +154,7 @@ std::pair<float, float> cursor_pos() {
 }
 
 bool fullscreen_window_present() {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (!g_display) {
     return false;
   }
