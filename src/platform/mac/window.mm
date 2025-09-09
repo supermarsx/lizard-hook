@@ -83,10 +83,19 @@ void poll_events(Window &window) {
 std::pair<float, float> cursor_pos() {
   @autoreleasepool {
     CGPoint p = [NSEvent mouseLocation];
-    NSScreen *s = [NSScreen mainScreen];
-    NSRect frame = [s frame];
-    float x = (p.x - frame.origin.x) / frame.size.width;
-    float y = (p.y - frame.origin.y) / frame.size.height;
+    CGFloat min_x = CGFLOAT_MAX;
+    CGFloat min_y = CGFLOAT_MAX;
+    CGFloat max_x = -CGFLOAT_MAX;
+    CGFloat max_y = -CGFLOAT_MAX;
+    for (NSScreen *s in [NSScreen screens]) {
+      NSRect frame = [s frame];
+      min_x = std::min(min_x, frame.origin.x);
+      min_y = std::min(min_y, frame.origin.y);
+      max_x = std::max(max_x, frame.origin.x + frame.size.width);
+      max_y = std::max(max_y, frame.origin.y + frame.size.height);
+    }
+    float x = (p.x - min_x) / (max_x - min_x);
+    float y = (p.y - min_y) / (max_y - min_y);
     return {x, y};
   }
 }
