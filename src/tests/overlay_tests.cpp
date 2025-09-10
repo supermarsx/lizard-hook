@@ -29,6 +29,13 @@ void glDeleteProgram(GLuint);
 #include "overlay/gl_raii.cpp"
 #include "overlay/overlay.cpp"
 
+#if defined(__linux__)
+namespace lizard::platform {
+void init_xlib_threads() {}
+std::pair<float, float> cursor_pos() { return {0.0f, 0.0f}; }
+} // namespace lizard::platform
+#endif
+
 struct OverlayTestAccess {
   static std::vector<lizard::overlay::Sprite> &sprites(lizard::overlay::Overlay &o) {
     return o.m_sprites;
