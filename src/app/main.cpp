@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
         lizard::platform::update_tray(tray_state);
       },
       [&]() {
-        auto path = cfg.logging_path().parent_path() / "lizard.json";
+        auto path = cfg.user_config_path();
         if (!std::filesystem::exists(path)) {
           path = cfg.logging_path().parent_path() / "lizard.json";
         }
