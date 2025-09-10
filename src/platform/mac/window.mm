@@ -94,8 +94,12 @@ std::pair<float, float> cursor_pos() {
       max_x = std::max(max_x, frame.origin.x + frame.size.width);
       max_y = std::max(max_y, frame.origin.y + frame.size.height);
     }
-    float x = (p.x - min_x) / (max_x - min_x);
-    float y = (p.y - min_y) / (max_y - min_y);
+    float w = max_x - min_x;
+    float h = max_y - min_y;
+    float x = w > 0.0f ? static_cast<float>((p.x - min_x) / w) : 0.0f;
+    float y = h > 0.0f ? static_cast<float>((max_y - p.y) / h) : 0.0f;
+    x = std::clamp(x, 0.0f, 1.0f);
+    y = std::clamp(y, 0.0f, 1.0f);
     return {x, y};
   }
 }
