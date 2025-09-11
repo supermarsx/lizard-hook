@@ -203,3 +203,14 @@ TEST_CASE("cursor_follow strategy uses provided coordinates", "[overlay]") {
   REQUIRE(b.x == Approx(0.25f));
   REQUIRE(b.y == Approx(0.75f));
 }
+
+TEST_CASE("badge spawns respect per-second limit", "[overlay]") {
+  Config cfg(std::filesystem::temp_directory_path());
+  cfg.badges_per_second_max_ = 2;
+  Overlay ov;
+  ov.init(cfg);
+  ov.spawn_badge(0, 0.0f, 0.0f);
+  ov.spawn_badge(0, 0.0f, 0.0f);
+  ov.spawn_badge(0, 0.0f, 0.0f);
+  REQUIRE(OverlayTestAccess::badges(ov).size() == 2);
+}
