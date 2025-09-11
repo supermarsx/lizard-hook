@@ -8,6 +8,7 @@
 #include <X11/extensions/Xrandr.h>
 #include <vector>
 #include <mutex>
+#include <algorithm>
 
 namespace lizard::platform {
 
@@ -145,11 +146,35 @@ std::pair<float, float> cursor_pos() {
                      &mask)) {
     return {0.5f, 0.5f};
   }
-  int screen = DefaultScreen(g_display);
-  float w = static_cast<float>(DisplayWidth(g_display, screen));
-  float h = static_cast<float>(DisplayHeight(g_display, screen));
-  float x = w > 0.0f ? static_cast<float>(root_x) / w : 0.0f;
-  float y = h > 0.0f ? static_cast<float>(root_y) / h : 0.0f;
+  int nmon = 0;
+  XRRMonitorInfo *mons = XRRGetMonitors(g_display, g_root, True, &nmon);
+  int min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+  if (mons && nmon > 0) {
+    min_x = mons[0].x;
+    min_y = mons[0].y;
+    max_x = mons[0].x + mons[0].width;
+    max_y = mons[0].y + mons[0].height;
+    for (int i = 1; i < nmon; ++i) {
+      min_x = std::min(min_x, mons[i].x);
+      min_y = std::min(min_y, mons[i].y);
+      max_x = std::max(max_x, mons[i].x + mons[i].width);
+      max_y = std::max(max_y, mons[i].y + mons[i].height);
+    }
+  } else {
+    int screen = DefaultScreen(g_display);
+    min_x = 0;
+    min_y = 0;
+    max_x = DisplayWidth(g_display, screen);
+    max_y = DisplayHeight(g_display, screen);
+  }
+  if (mons)
+    XRRFreeMonitors(mons);
+  float w = static_cast<float>(max_x - min_x);
+  float h = static_cast<float>(max_y - min_y);
+  float x = w > 0.0f ? static_cast<float>(root_x - min_x) / w : 0.5f;
+  float y = h > 0.0f ? static_cast<float>(root_y - min_y) / h : 0.5f;
+  x = std::clamp(x, 0.0f, 1.0f);
+  y = 1.0f - std::clamp(y, 0.0f, 1.0f);
   return {x, y};
 }
 
