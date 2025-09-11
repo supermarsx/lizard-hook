@@ -7,6 +7,8 @@
 #include <X11/extensions/shape.h>
 #include <X11/extensions/Xrandr.h>
 #include <vector>
+#include <mutex>
+#include <algorithm>
 
 namespace lizard::platform {
 
@@ -15,6 +17,8 @@ namespace {
 Display *g_display = nullptr;
 ::Window g_root = 0;
 ::Window g_overlay = 0;
+std::mutex g_display_mutex;
+std::once_flag g_xlib_init_once;
 
 float compute_dpi(Display *dpy) {
   int screen = DefaultScreen(dpy);
@@ -26,8 +30,14 @@ float compute_dpi(Display *dpy) {
 
 } // namespace
 
+void init_xlib_threads() {
+  std::call_once(g_xlib_init_once, []() { XInitThreads(); });
+}
+
 Window create_overlay_window(const WindowDesc &desc) {
+  init_xlib_threads();
   Window result{};
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   g_display = XOpenDisplay(nullptr);
   if (!g_display) {
     return result;
@@ -98,6 +108,7 @@ Window create_overlay_window(const WindowDesc &desc) {
 }
 
 void destroy_window(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (g_display && window.native) {
     glXMakeCurrent(g_display, None, nullptr);
     if (window.glContext) {
@@ -112,6 +123,7 @@ void destroy_window(Window &window) {
 }
 
 void poll_events(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (!g_display || !window.native) {
     return;
   }
@@ -121,7 +133,53 @@ void poll_events(Window &window) {
   }
 }
 
+std::pair<float, float> cursor_pos() {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
+  if (!g_display) {
+    return {0.5f, 0.5f};
+  }
+  ::Window root_return, child;
+  int root_x = 0, root_y = 0;
+  int win_x = 0, win_y = 0;
+  unsigned int mask = 0;
+  if (!XQueryPointer(g_display, g_root, &root_return, &child, &root_x, &root_y, &win_x, &win_y,
+                     &mask)) {
+    return {0.5f, 0.5f};
+  }
+  int nmon = 0;
+  XRRMonitorInfo *mons = XRRGetMonitors(g_display, g_root, True, &nmon);
+  int min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+  if (mons && nmon > 0) {
+    min_x = mons[0].x;
+    min_y = mons[0].y;
+    max_x = mons[0].x + mons[0].width;
+    max_y = mons[0].y + mons[0].height;
+    for (int i = 1; i < nmon; ++i) {
+      min_x = std::min(min_x, mons[i].x);
+      min_y = std::min(min_y, mons[i].y);
+      max_x = std::max(max_x, mons[i].x + mons[i].width);
+      max_y = std::max(max_y, mons[i].y + mons[i].height);
+    }
+  } else {
+    int screen = DefaultScreen(g_display);
+    min_x = 0;
+    min_y = 0;
+    max_x = DisplayWidth(g_display, screen);
+    max_y = DisplayHeight(g_display, screen);
+  }
+  if (mons)
+    XRRFreeMonitors(mons);
+  float w = static_cast<float>(max_x - min_x);
+  float h = static_cast<float>(max_y - min_y);
+  float x = w > 0.0f ? static_cast<float>(root_x - min_x) / w : 0.5f;
+  float y = h > 0.0f ? static_cast<float>(root_y - min_y) / h : 0.5f;
+  x = std::clamp(x, 0.0f, 1.0f);
+  y = std::clamp(y, 0.0f, 1.0f);
+  return {x, y};
+}
+
 bool fullscreen_window_present() {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
   if (!g_display) {
     return false;
   }
@@ -130,8 +188,9 @@ bool fullscreen_window_present() {
   int format;
   unsigned long nitems, bytes;
   unsigned char *data = nullptr;
-  if (XGetWindowProperty(g_display, g_root, listAtom, 0, ~0L, False, XA_WINDOW, &type,
-                         &format, &nitems, &bytes, &data) != Success || !data) {
+  if (XGetWindowProperty(g_display, g_root, listAtom, 0, ~0L, False, XA_WINDOW, &type, &format,
+                         &nitems, &bytes, &data) != Success ||
+      !data) {
     if (data)
       XFree(data);
     return false;
@@ -183,8 +242,7 @@ bool fullscreen_window_present() {
         full = true;
         break;
       }
-      if (wx < m.x + m.w && wx + attrs.width > m.x && wy < m.y + m.h &&
-          wy + attrs.height > m.y) {
+      if (wx < m.x + m.w && wx + attrs.width > m.x && wy < m.y + m.h && wy + attrs.height > m.y) {
         seen[i] = true;
       }
     }

@@ -1,8 +1,8 @@
 // glad must be included before any platform window headers to ensure modern
 // OpenGL symbols like glBindBuffer are declared. Even in test builds we include
 // it so GL types are available.
-#include "glad/glad.h"
 #ifndef LIZARD_TEST
+#include "glad/glad.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #else
@@ -61,6 +61,8 @@ extern bool g_overlay_log_called;
 
 using json = nlohmann::json;
 
+struct OverlayTestAccess;
+
 namespace lizard::overlay {
 
 struct Sprite {
@@ -96,6 +98,7 @@ public:
   bool init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path = std::nullopt);
   void shutdown();
   void spawn_badge(int sprite, float x, float y);
+  void spawn_badge(float x, float y);
   void run(std::stop_token st);
   void stop();
   void set_paused(bool v) { m_paused = v; }
@@ -164,6 +167,7 @@ void Overlay::update_frame_interval() {
       CGDisplayModeRelease(mode);
     }
 #elif defined(__linux__)
+    platform::init_xlib_threads();
     Display *dpy = XOpenDisplay(nullptr);
     if (dpy) {
       Window root = DefaultRootWindow(dpy);
@@ -339,6 +343,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     desc.height = 600;
   }
 #elif defined(__linux__)
+  platform::init_xlib_threads();
   if (Display *dpy = XOpenDisplay(nullptr)) {
     int screen = DefaultScreen(dpy);
     desc.x = 0;
@@ -485,7 +490,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   m_instanceData.reserve(m_badge_capacity * 10);
 
   if (!m_sprites.empty()) {
-    spawn_badge(select_sprite(), 0.0f, 0.0f);
+    spawn_badge(0.0f, 0.0f);
   }
 
   // Geometry
@@ -656,6 +661,8 @@ int Overlay::select_sprite() {
   auto idx = m_selector(m_rng);
   return m_selector_indices[idx];
 }
+
+void Overlay::spawn_badge(float x, float y) { spawn_badge(select_sprite(), x, y); }
 
 void Overlay::spawn_badge(int sprite, float x, float y) {
   if (m_badge_suppressed) {

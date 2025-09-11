@@ -99,6 +99,26 @@ void poll_events(Window &window) {
   }
 }
 
+std::pair<float, float> cursor_pos() {
+  POINT p;
+  if (!GetCursorPos(&p)) {
+    return {0.5f, 0.5f};
+  }
+  int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+  int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+  int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+  int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  float x = 0.0f;
+  float y = 0.0f;
+  if (vw > 0 && vh > 0) {
+    x = static_cast<float>(p.x - vx) / static_cast<float>(vw);
+    y = static_cast<float>(p.y - vy) / static_cast<float>(vh);
+  }
+  x = std::clamp(x, 0.0f, 1.0f);
+  y = std::clamp(y, 0.0f, 1.0f);
+  return {x, y};
+}
+
 bool fullscreen_window_present() {
   struct EnumData {
     bool full = false;
@@ -131,8 +151,7 @@ bool fullscreen_window_present() {
           return TRUE;
         }
         if (rect.left <= mi.rcMonitor.left && rect.top <= mi.rcMonitor.top &&
-            rect.right >= mi.rcMonitor.right &&
-            rect.bottom >= mi.rcMonitor.bottom) {
+            rect.right >= mi.rcMonitor.right && rect.bottom >= mi.rcMonitor.bottom) {
           d->full = true;
           return FALSE;
         }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <utility>
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__linux__)
@@ -36,5 +37,9 @@ Window create_overlay_window(const WindowDesc &desc);
 void destroy_window(Window &window);
 void poll_events(Window &window);
 bool fullscreen_window_present();
+std::pair<float, float> cursor_pos();
+#if defined(__linux__)
+void init_xlib_threads();
+#endif
 
 } // namespace lizard::platform
