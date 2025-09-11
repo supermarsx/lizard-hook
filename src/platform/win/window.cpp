@@ -113,7 +113,10 @@ std::pair<float, float> cursor_pos() {
   if (vw > 0 && vh > 0) {
     x = static_cast<float>(p.x - vx) / static_cast<float>(vw);
     y = static_cast<float>(p.y - vy) / static_cast<float>(vh);
+    y = 1.0f - y;
   }
+  x = std::clamp(x, 0.0f, 1.0f);
+  y = std::clamp(y, 0.0f, 1.0f);
   return {x, y};
 }
 
