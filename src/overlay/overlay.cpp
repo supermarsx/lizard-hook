@@ -30,6 +30,7 @@ void stbi_image_free(void *);
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 #include <atomic>
 
 #include <climits>
@@ -132,6 +133,8 @@ private:
   std::vector<int> m_selector_indices;
   std::discrete_distribution<> m_selector;
   std::mt19937 m_rng{std::random_device{}()};
+  std::deque<std::chrono::steady_clock::time_point> m_spawn_times;
+  int m_badges_per_second_max = 12;
   gl::Texture m_texture;
   gl::VertexArray m_vao;
   gl::Buffer m_vbo;
@@ -204,6 +207,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   }
   m_badge_min_px = cfg.badge_min_px();
   m_badge_max_px = cfg.badge_max_px();
+  m_badges_per_second_max = cfg.badges_per_second_max();
   update_frame_interval();
 #ifdef LIZARD_TEST
   if (emoji_path && emoji_path->extension() == ".png") {
@@ -677,6 +681,15 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
     return;
   }
 
+  auto now = std::chrono::steady_clock::now();
+  while (!m_spawn_times.empty() && now - m_spawn_times.front() > std::chrono::seconds(1)) {
+    m_spawn_times.pop_front();
+  }
+  if (m_badges_per_second_max > 0 &&
+      static_cast<int>(m_spawn_times.size()) >= m_badges_per_second_max) {
+    return;
+  }
+
   float px = x;
   float py = y;
   if (m_spawn_strategy == BadgeSpawnStrategy::RandomScreen) {
@@ -712,6 +725,7 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
 
   m_badges.emplace_back(Badge{px, py, vx, vy, phase, scale, 0.0f, rotation, 0.0f, lifetime, fade_in,
                               fade_out, sprite});
+  m_spawn_times.push_back(now);
 }
 
 void Overlay::stop() { m_running = false; }
