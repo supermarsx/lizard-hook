@@ -1,65 +1,10 @@
-name: ci
+name: release
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags: ['v*']
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-tidy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-tidy
-      - name: Configure
-        run: cmake --preset linux
-      - name: clang-tidy
-        run: run-clang-tidy -p build/linux
-
-  format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-format
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format
-      - name: Check formatting
-        run: |
-          clang-format --version
-          clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp' '*.c' '*.h')
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build xorg-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libx11-dev libxext-dev libasound2-dev libgtk-3-dev
-      - name: Configure
-        run: cmake --preset linux -DLIZARD_EMBED_ASSETS=ON
-      - name: Build (type check)
-        run: cmake --build build/linux --config Release --target LizardHook
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build xorg-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libx11-dev libxext-dev libasound2-dev libgtk-3-dev
-      - name: Configure
-        run: cmake --preset linux -DLIZARD_EMBED_ASSETS=ON
-      - name: Build
-        run: cmake --build build/linux --config Release
-      - name: Test
-        run: ctest --test-dir build/linux --output-on-failure
-
   build:
     name: ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
@@ -144,19 +89,45 @@ jobs:
           fi
         shell: bash
 
-      - name: Verify linkage
-        run: |
-          if [ "${{ matrix.runner }}" = "ubuntu-latest" ]; then
-            ldd install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook || true
-          elif [ "${{ matrix.runner }}" = "macos-latest" ]; then
-            otool -L install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook || true
-          else
-            dumpbin /DEPENDENTS install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook.exe || true
-          fi
-        shell: bash
-
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: ver
+        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: LizardHook-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate changelog
+        run: |
+          prev_tag=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          git log ${prev_tag}..HEAD --pretty=format:'- %s' > changelog.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Lizard Hook v${{ steps.ver.outputs.version }}
+          body_path: changelog.md
+          files: |
+            dist/LizardHook-win-x64.zip
+            dist/LizardHook-macos-x64.zip
+            dist/LizardHook-macos-arm64.zip
+            dist/LizardHook-linux-x64.tar.gz
+            dist/LizardHook-linux-arm64.tar.gz
 
