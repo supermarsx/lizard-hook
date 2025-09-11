@@ -48,10 +48,10 @@ public:
 
   void reload();
   std::condition_variable &reload_cv() { return reload_cv_; }
+  static std::filesystem::path user_config_path();
 
 private:
   void load(std::unique_lock<std::shared_mutex> &lock);
-  static std::filesystem::path user_config_path();
 
   mutable std::shared_mutex mutex_;
   std::filesystem::path config_path_;
