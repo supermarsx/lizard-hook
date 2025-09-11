@@ -174,7 +174,7 @@ std::pair<float, float> cursor_pos() {
   float x = w > 0.0f ? static_cast<float>(root_x - min_x) / w : 0.5f;
   float y = h > 0.0f ? static_cast<float>(root_y - min_y) / h : 0.5f;
   x = std::clamp(x, 0.0f, 1.0f);
-  y = 1.0f - std::clamp(y, 0.0f, 1.0f);
+  y = std::clamp(y, 0.0f, 1.0f);
   return {x, y};
 }
 
