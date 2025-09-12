@@ -1,4 +1,13 @@
 # lizard-hook
+
+[![CI](https://github.com/supermarx/lizard-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/supermarx/lizard-hook/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/supermarx/lizard-hook/branch/main/graph/badge.svg?token=...)](https://codecov.io/gh/supermarx/lizard-hook)
+[![Stars](https://img.shields.io/github/stars/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook)
+[![Forks](https://img.shields.io/github/forks/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook)
+[![Watchers](https://img.shields.io/github/watchers/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook)
+[![Issues](https://img.shields.io/github/issues/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook/issues)
+[![Commit Activity](https://badgen.net/badge/commit-activity/greenkeeper?icon=green_knight)](https://greenkeeper.io/)
+[![made-with-cpp](https://img.shields.io/badge/made_with-C%2B%2B-green.svg)](https://isocpp.org/)
 Lizard Meme Keyboard Hook
 
 ## Prerequisites
