@@ -1,6 +1,27 @@
-# lizard-hook
+# Lizard Hook
 
-Lizard Meme Keyboard Hook
+[![CI](https://img.shields.io/github/actions/workflow/status/supermarsx/lizard-hook/ci.yml?branch=main)](https://github.com/supermarsx/lizard-hook/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/supermarsx/lizard-hook)](https://codecov.io/gh/supermarsx/lizard-hook)
+[![Downloads](https://img.shields.io/github/downloads/supermarsx/lizard-hook/total)](https://github.com/supermarsx/lizard-hook/releases)
+[![Stars](https://img.shields.io/github/stars/supermarsx/lizard-hook)](https://github.com/supermarsx/lizard-hook/stargazers)
+[![Forks](https://img.shields.io/github/forks/supermarsx/lizard-hook)](https://github.com/supermarsx/lizard-hook/network/members)
+[![Watchers](https://img.shields.io/github/watchers/supermarsx/lizard-hook)](https://github.com/supermarsx/lizard-hook/watchers)
+[![Issues](https://img.shields.io/github/issues/supermarsx/lizard-hook)](https://github.com/supermarsx/lizard-hook/issues)
+[![Commit Activity](https://img.shields.io/github/commit-activity/m/supermarsx/lizard-hook)](https://github.com/supermarsx/lizard-hook/graphs/commit-activity)
+[![Made with C++](https://img.shields.io/badge/Made%20with-C++-blue)](#)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](license.md)
+
+Lizard Hook is a lightweight cross-platform keyboard overlay that plays a short
+FLAC sample and spawns fading emoji badges without stealing focus.
+
+## Features
+
+- Global keyboard hook with audio and visual feedback
+- Cross-platform support for Windows, macOS, and Linux (X11)
+- Embedded assets with optional external overrides
+- Live configuration reload on file changes
+- Low CPU usage and minimal resource footprint
+- Customizable sound and emoji atlas
 
 ## Prerequisites
 
@@ -35,30 +56,6 @@ cmake --build build/macos
 ```sh
 cmake --preset linux
 cmake --build build/linux
-```
-
-## Testing
-
-Build and run the test suite:
-
-```sh
-cmake -S . -B build
-cmake --build build
-cmake --build build --target test
-```
-
-Third-party dependencies are cloned at configure time; an Internet connection is required for the first build.
-
-Format the source tree with:
-
-```sh
-cmake --build build --target format
-```
-
-Run static analysis and formatting checks with:
-
-```sh
-cmake --build build --target lint
 ```
 
 ## Usage
@@ -124,22 +121,8 @@ The application watches the selected file and reloads it automatically when it c
   application can only operate in per-window mode.
 - Requires a functional OpenGL driver; headless environments are unsupported.
 
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository and create a topic branch.
-2. Ensure the project builds and tests pass:
-
-   ```sh
-   cmake -S . -B build
-   cmake --build build
-   cmake --build build --target test
-   cmake --build build --target lint
-   ```
-
-3. Use `cmake --build build --target format` to apply formatting.
-4. Open a pull request describing your changes.
+For testing instructions and contribution guidelines, see
+[development.md](development.md).
 
 ## License
 
