@@ -74,13 +74,13 @@ jobs:
             artifact: LizardHook-linux-x64.tar.gz
             ext: tar.gz
             configure_args: ""
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
             preset: linux
             artifact: LizardHook-linux-arm64.tar.gz
             ext: tar.gz
-            configure_args: "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+            configure_args: ""
           - runner: macos-latest
             os: macos
             arch: x64
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup prerequisites (Linux)
-        if: matrix.runner == 'ubuntu-latest'
+        if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build xorg-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libx11-dev libxext-dev libasound2-dev libgtk-3-dev
@@ -146,9 +146,9 @@ jobs:
 
       - name: Verify linkage
         run: |
-          if [ "${{ matrix.runner }}" = "ubuntu-latest" ]; then
+          if [ "${{ matrix.os }}" = "linux" ]; then
             ldd install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook || true
-          elif [ "${{ matrix.runner }}" = "macos-latest" ]; then
+          elif [ "${{ matrix.os }}" = "macos" ]; then
             otool -L install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook || true
           else
             dumpbin /DEPENDENTS install/${{ matrix.preset }}-${{ matrix.arch }}/LizardHook.exe || true
