@@ -1,6 +1,6 @@
 # lizard-hook
 
-[![CI](https://github.com/supermarx/lizard-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/supermarx/lizard-hook/actions/workflows/ci.yml)
+[![CI](https://github.com/supermarsx/lizard-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/supermarx/lizard-hook/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/supermarx/lizard-hook/branch/main/graph/badge.svg?token=...)](https://codecov.io/gh/supermarx/lizard-hook)
 [![Stars](https://img.shields.io/github/stars/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook)
 [![Forks](https://img.shields.io/github/forks/supermarx/lizard-hook?style=flat)](https://github.com/supermarx/lizard-hook)
