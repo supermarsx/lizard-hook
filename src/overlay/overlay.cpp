@@ -31,6 +31,7 @@ void stbi_image_free(void *);
 #include <unordered_map>
 #include <vector>
 #include <deque>
+#include <mutex>
 #include <atomic>
 
 #include <climits>
@@ -102,6 +103,7 @@ public:
   void spawn_badge(float x, float y);
   void run(std::stop_token st);
   void stop();
+  void refresh_from_config(const app::Config &cfg);
   void set_paused(bool v) { m_paused = v; }
   void set_fps_mode(platform::FpsMode mode) {
     m_fps_mode = mode;
@@ -118,6 +120,24 @@ private:
   void update(float dt);
   void render();
   void update_frame_interval();
+  void apply_pending_config();
+  bool load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path);
+  void build_selector(const std::vector<std::string> &emoji,
+                      const std::unordered_map<std::string, double> &emoji_weighted);
+  static std::optional<std::filesystem::path>
+  normalize_path(const std::optional<std::filesystem::path> &path);
+
+  struct PendingConfig {
+    std::string spawn_strategy;
+    int badge_min_px = 60;
+    int badge_max_px = 108;
+    int badges_per_second_max = 12;
+    std::string fps_mode;
+    int fps_fixed = 60;
+    std::optional<std::filesystem::path> emoji_atlas;
+    std::vector<std::string> emoji;
+    std::unordered_map<std::string, double> emoji_weighted;
+  };
 
   platform::Window m_window{};
   std::vector<Badge> m_badges;
@@ -146,6 +166,10 @@ private:
   platform::FpsMode m_fps_mode = platform::FpsMode::Auto;
   int m_fps_fixed = 60;
   std::atomic<std::int64_t> m_frame_interval_us{1000000 / 60};
+  std::optional<std::filesystem::path> m_current_emoji_path;
+  std::mutex m_pending_mutex;
+  std::optional<PendingConfig> m_pending_config;
+  std::atomic<bool> m_has_pending_config{false};
 };
 
 void Overlay::update_frame_interval() {
@@ -209,107 +233,12 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   m_badge_max_px = cfg.badge_max_px();
   m_badges_per_second_max = cfg.badges_per_second_max();
   update_frame_interval();
-#ifdef LIZARD_TEST
-  if (emoji_path && emoji_path->extension() == ".png") {
-    int w, h, channels;
-    unsigned char *pixels = stbi_load(emoji_path->string().c_str(), &w, &h, &channels, 4);
-    if (!pixels) {
-#ifdef LIZARD_TEST
-      g_overlay_log_called = true;
-#endif
-      spdlog::error("Failed to load emoji atlas {}: {}", emoji_path->string(),
-                    stbi_failure_reason());
-      return false;
-    }
-    stbi_image_free(pixels);
-  }
 
-  std::ifstream atlas_file;
-  std::istringstream atlas_default(R"({
-  "sprites": {
-    "🦎": { "u0": 0.0, "v0": 0.0, "u1": 0.5, "v1": 0.5 },
-    "🐍": { "u0": 0.5, "v0": 0.0, "u1": 1.0, "v1": 0.5 },
-    "🐢": { "u0": 0.0, "v0": 0.5, "u1": 0.5, "v1": 1.0 }
+  auto normalized_path = normalize_path(emoji_path);
+#ifdef LIZARD_TEST
+  if (!load_atlas_from_path(normalized_path)) {
+    return false;
   }
-})");
-  std::istream *atlas = nullptr;
-  if (emoji_path) {
-    if (emoji_path->extension() == ".json") {
-      atlas_file.open(*emoji_path);
-      if (atlas_file.is_open()) {
-        atlas = &atlas_file;
-      }
-    } else {
-      std::filesystem::path json_path = *emoji_path;
-      json_path += ".json";
-      if (std::filesystem::exists(json_path)) {
-        atlas_file.open(json_path);
-        if (atlas_file.is_open()) {
-          atlas = &atlas_file;
-        }
-      }
-      if (!atlas) {
-        json_path = emoji_path->parent_path() / "emoji_atlas.json";
-        if (std::filesystem::exists(json_path)) {
-          atlas_file.open(json_path);
-          if (atlas_file.is_open()) {
-            atlas = &atlas_file;
-          }
-        }
-      }
-    }
-  }
-  if (!atlas) {
-    atlas = &atlas_default;
-  }
-  try {
-    json j;
-    *atlas >> j;
-    if (j.contains("sprites") && j["sprites"].is_object()) {
-      for (const auto &[emoji, s] : j["sprites"].items()) {
-        Sprite sp{};
-        sp.u0 = s.value("u0", 0.0f);
-        sp.v0 = s.value("v0", 0.0f);
-        sp.u1 = s.value("u1", 1.0f);
-        sp.v1 = s.value("v1", 1.0f);
-        m_sprite_lookup[emoji] = static_cast<int>(m_sprites.size());
-        m_sprites.push_back(sp);
-      }
-    }
-  } catch (const std::exception &e) {
-    spdlog::error("Failed to parse emoji atlas: {}", e.what());
-  }
-  if (m_sprites.empty()) {
-    m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
-    m_sprite_lookup["🦎"] = 0;
-  }
-
-  std::vector<double> weights;
-  if (!cfg.emoji_weighted().empty()) {
-    for (const auto &[emoji, weight] : cfg.emoji_weighted()) {
-      auto it = m_sprite_lookup.find(emoji);
-      if (it != m_sprite_lookup.end()) {
-        m_selector_indices.push_back(it->second);
-        weights.push_back(weight);
-      }
-    }
-  } else {
-    for (const auto &emoji : cfg.emoji()) {
-      auto it = m_sprite_lookup.find(emoji);
-      if (it != m_sprite_lookup.end()) {
-        m_selector_indices.push_back(it->second);
-        weights.push_back(1.0);
-      }
-    }
-  }
-  if (m_selector_indices.empty()) {
-    for (int i = 0; i < static_cast<int>(m_sprites.size()); ++i) {
-      m_selector_indices.push_back(i);
-      weights.push_back(1.0);
-    }
-  }
-  m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
-  return true;
 #else
   platform::WindowDesc desc{};
 #ifdef _WIN32
@@ -374,120 +303,12 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     return false;
   }
 
-  // Load atlas
-  int w, h, channels;
-  unsigned char *pixels = nullptr;
-  if (emoji_path && std::filesystem::exists(*emoji_path)) {
-    pixels = stbi_load(emoji_path->string().c_str(), &w, &h, &channels, 4);
-  } else {
-    pixels = stbi_load_from_memory(lizard::assets::lizard_regular_png,
-                                   lizard::assets::lizard_regular_png_len, &w, &h, &channels, 4);
-  }
-  if (!pixels) {
-    if (emoji_path && std::filesystem::exists(*emoji_path)) {
-      spdlog::error("Failed to load emoji atlas {}: {}", emoji_path->string(),
-                    stbi_failure_reason());
-    } else {
-      spdlog::error("Failed to load embedded emoji atlas: {}", stbi_failure_reason());
-    }
+  if (!load_atlas_from_path(normalized_path)) {
     return false;
   }
+#endif
 
-  // Pre-multiply RGB by alpha
-  for (int i = 0; i < w * h; ++i) {
-    unsigned char *p = pixels + i * 4;
-    unsigned char a = p[3];
-    p[0] = static_cast<unsigned char>(p[0] * a / 255);
-    p[1] = static_cast<unsigned char>(p[1] * a / 255);
-    p[2] = static_cast<unsigned char>(p[2] * a / 255);
-  }
-  m_texture.create();
-  glBindTexture(GL_TEXTURE_2D, m_texture.id);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  stbi_image_free(pixels);
-
-  // Load sprite UVs from atlas
-  std::ifstream atlas_file;
-  std::istringstream atlas_default(R"({
-  "sprites": {
-    "🦎": { "u0": 0.0, "v0": 0.0, "u1": 0.5, "v1": 0.5 },
-    "🐍": { "u0": 0.5, "v0": 0.0, "u1": 1.0, "v1": 0.5 },
-    "🐢": { "u0": 0.0, "v0": 0.5, "u1": 0.5, "v1": 1.0 }
-  }
-})");
-  std::istream *atlas = nullptr;
-  if (emoji_path) {
-    std::filesystem::path json_path = *emoji_path;
-    json_path += ".json";
-    if (std::filesystem::exists(json_path)) {
-      atlas_file.open(json_path);
-      if (atlas_file.is_open()) {
-        atlas = &atlas_file;
-      }
-    }
-    if (!atlas) {
-      json_path = emoji_path->parent_path() / "emoji_atlas.json";
-      if (std::filesystem::exists(json_path)) {
-        atlas_file.open(json_path);
-        if (atlas_file.is_open()) {
-          atlas = &atlas_file;
-        }
-      }
-    }
-  }
-  if (!atlas) {
-    atlas = &atlas_default;
-  }
-  try {
-    json j;
-    *atlas >> j;
-    if (j.contains("sprites") && j["sprites"].is_object()) {
-      for (const auto &[emoji, s] : j["sprites"].items()) {
-        Sprite sp{};
-        sp.u0 = s.value("u0", 0.0f);
-        sp.v0 = s.value("v0", 0.0f);
-        sp.u1 = s.value("u1", 1.0f);
-        sp.v1 = s.value("v1", 1.0f);
-        m_sprite_lookup[emoji] = static_cast<int>(m_sprites.size());
-        m_sprites.push_back(sp);
-      }
-    }
-  } catch (const std::exception &e) {
-    spdlog::error("Failed to parse emoji atlas: {}", e.what());
-  }
-  if (m_sprites.empty()) {
-    m_sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
-    m_sprite_lookup["🦎"] = 0;
-  }
-
-  // Build selector from config
-  std::vector<double> weights;
-  if (!cfg.emoji_weighted().empty()) {
-    for (const auto &[emoji, weight] : cfg.emoji_weighted()) {
-      auto it = m_sprite_lookup.find(emoji);
-      if (it != m_sprite_lookup.end()) {
-        m_selector_indices.push_back(it->second);
-        weights.push_back(weight);
-      }
-    }
-  } else {
-    for (const auto &emoji : cfg.emoji()) {
-      auto it = m_sprite_lookup.find(emoji);
-      if (it != m_sprite_lookup.end()) {
-        m_selector_indices.push_back(it->second);
-        weights.push_back(1.0);
-      }
-    }
-  }
-  if (m_selector_indices.empty()) {
-    for (int i = 0; i < static_cast<int>(m_sprites.size()); ++i) {
-      m_selector_indices.push_back(i);
-      weights.push_back(1.0);
-    }
-  }
-  m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
+  build_selector(cfg.emoji(), cfg.emoji_weighted());
 
   m_badge_capacity = 150;
   m_badges.reserve(m_badge_capacity);
@@ -497,6 +318,7 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     spawn_badge(0.0f, 0.0f);
   }
 
+#ifndef LIZARD_TEST
   // Geometry
   const float verts[] = {-0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, 1.0f, 0.0f,
                          0.5f,  0.5f,  1.0f, 1.0f, -0.5f, 0.5f,  0.0f, 1.0f};
@@ -623,9 +445,241 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   glDeleteShader(vsId);
   glDeleteShader(fsId);
 
+#endif
   m_running = true;
   return true;
+}
+
+std::optional<std::filesystem::path>
+Overlay::normalize_path(const std::optional<std::filesystem::path> &path) {
+  if (!path || path->empty()) {
+    return std::nullopt;
+  }
+  return path->lexically_normal();
+}
+
+bool Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path) {
+  auto normalized = normalize_path(emoji_path);
+  std::unordered_map<std::string, int> lookup;
+  std::vector<Sprite> sprites;
+
+#ifdef LIZARD_TEST
+  if (normalized && normalized->extension() == ".png") {
+    int w = 0;
+    int h = 0;
+    int channels = 0;
+    unsigned char *pixels = stbi_load(normalized->string().c_str(), &w, &h, &channels, 4);
+    if (!pixels) {
+      g_overlay_log_called = true;
+      spdlog::error("Failed to load emoji atlas {}: {}", normalized->string(),
+                    stbi_failure_reason());
+      return false;
+    }
+    stbi_image_free(pixels);
+  }
+#else
+  int w = 0;
+  int h = 0;
+  int channels = 0;
+  unsigned char *pixels = nullptr;
+  if (normalized) {
+    pixels = stbi_load(normalized->string().c_str(), &w, &h, &channels, 4);
+  } else {
+    pixels = stbi_load_from_memory(lizard::assets::lizard_regular_png,
+                                   lizard::assets::lizard_regular_png_len, &w, &h, &channels, 4);
+  }
+  if (!pixels) {
+    if (normalized) {
+      spdlog::error("Failed to load emoji atlas {}: {}", normalized->string(),
+                    stbi_failure_reason());
+    } else {
+      spdlog::error("Failed to load embedded emoji atlas: {}", stbi_failure_reason());
+    }
+    return false;
+  }
+
+  for (int i = 0; i < w * h; ++i) {
+    unsigned char *p = pixels + i * 4;
+    unsigned char a = p[3];
+    p[0] = static_cast<unsigned char>(p[0] * a / 255);
+    p[1] = static_cast<unsigned char>(p[1] * a / 255);
+    p[2] = static_cast<unsigned char>(p[2] * a / 255);
+  }
+  if (!m_texture.id) {
+    m_texture.create();
+  }
+  glBindTexture(GL_TEXTURE_2D, m_texture.id);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  stbi_image_free(pixels);
 #endif
+
+  std::ifstream atlas_file;
+  std::istringstream atlas_default(R"({
+  "sprites": {
+    "🦎": { "u0": 0.0, "v0": 0.0, "u1": 0.5, "v1": 0.5 },
+    "🐍": { "u0": 0.5, "v0": 0.0, "u1": 1.0, "v1": 0.5 },
+    "🐢": { "u0": 0.0, "v0": 0.5, "u1": 0.5, "v1": 1.0 }
+  }
+})");
+  std::istream *atlas = nullptr;
+  if (normalized) {
+    if (normalized->extension() == ".json") {
+      atlas_file.open(*normalized);
+      if (atlas_file.is_open()) {
+        atlas = &atlas_file;
+      }
+    } else {
+      std::filesystem::path json_path = *normalized;
+      json_path += ".json";
+      if (std::filesystem::exists(json_path)) {
+        atlas_file.open(json_path);
+        if (atlas_file.is_open()) {
+          atlas = &atlas_file;
+        }
+      }
+      if (!atlas) {
+        json_path = normalized->parent_path() / "emoji_atlas.json";
+        if (std::filesystem::exists(json_path)) {
+          atlas_file.open(json_path);
+          if (atlas_file.is_open()) {
+            atlas = &atlas_file;
+          }
+        }
+      }
+    }
+  }
+  if (!atlas) {
+    atlas = &atlas_default;
+  }
+  try {
+    json j;
+    *atlas >> j;
+    if (j.contains("sprites") && j["sprites"].is_object()) {
+      for (const auto &[emoji, s] : j["sprites"].items()) {
+        Sprite sp{};
+        sp.u0 = s.value("u0", 0.0f);
+        sp.v0 = s.value("v0", 0.0f);
+        sp.u1 = s.value("u1", 1.0f);
+        sp.v1 = s.value("v1", 1.0f);
+        lookup[emoji] = static_cast<int>(sprites.size());
+        sprites.push_back(sp);
+      }
+    }
+  } catch (const std::exception &e) {
+    spdlog::error("Failed to parse emoji atlas: {}", e.what());
+  }
+  if (sprites.empty()) {
+    sprites.push_back({0.0f, 0.0f, 1.0f, 1.0f});
+    lookup["🦎"] = 0;
+  }
+
+  m_sprite_lookup = std::move(lookup);
+  m_sprites = std::move(sprites);
+  m_current_emoji_path = normalized;
+  return true;
+}
+
+void Overlay::build_selector(const std::vector<std::string> &emoji,
+                             const std::unordered_map<std::string, double> &emoji_weighted) {
+  m_selector_indices.clear();
+  std::vector<double> weights;
+
+  if (!emoji_weighted.empty()) {
+    for (const auto &[symbol, weight] : emoji_weighted) {
+      auto it = m_sprite_lookup.find(symbol);
+      if (it != m_sprite_lookup.end()) {
+        m_selector_indices.push_back(it->second);
+        weights.push_back(weight);
+      }
+    }
+  } else if (!emoji.empty()) {
+    for (const auto &symbol : emoji) {
+      auto it = m_sprite_lookup.find(symbol);
+      if (it != m_sprite_lookup.end()) {
+        m_selector_indices.push_back(it->second);
+        weights.push_back(1.0);
+      }
+    }
+  }
+
+  if (m_selector_indices.empty()) {
+    for (int i = 0; i < static_cast<int>(m_sprites.size()); ++i) {
+      m_selector_indices.push_back(i);
+      weights.push_back(1.0);
+    }
+  }
+
+  if (weights.empty()) {
+    weights.push_back(1.0);
+    if (m_selector_indices.empty()) {
+      m_selector_indices.push_back(0);
+    }
+  }
+
+  m_selector = std::discrete_distribution<>(weights.begin(), weights.end());
+}
+
+void Overlay::refresh_from_config(const app::Config &cfg) {
+  PendingConfig pending;
+  pending.spawn_strategy = cfg.badge_spawn_strategy();
+  pending.badge_min_px = cfg.badge_min_px();
+  pending.badge_max_px = cfg.badge_max_px();
+  pending.badges_per_second_max = cfg.badges_per_second_max();
+  pending.fps_mode = cfg.fps_mode();
+  pending.fps_fixed = cfg.fps_fixed();
+  pending.emoji_atlas = normalize_path(cfg.emoji_atlas());
+  pending.emoji = cfg.emoji();
+  pending.emoji_weighted = cfg.emoji_weighted();
+
+  {
+    std::lock_guard<std::mutex> lock(m_pending_mutex);
+    m_pending_config = std::move(pending);
+  }
+  m_has_pending_config.store(true, std::memory_order_release);
+}
+
+void Overlay::apply_pending_config() {
+  PendingConfig pending;
+  {
+    std::lock_guard<std::mutex> lock(m_pending_mutex);
+    if (!m_pending_config) {
+      return;
+    }
+    pending = *m_pending_config;
+    m_pending_config.reset();
+  }
+
+  if (pending.spawn_strategy == "cursor_follow") {
+    m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
+  } else {
+    m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
+  }
+
+  m_badge_min_px = pending.badge_min_px;
+  m_badge_max_px = pending.badge_max_px;
+  m_badges_per_second_max = pending.badges_per_second_max;
+
+  if (pending.fps_mode == "fixed") {
+    set_fps_fixed(pending.fps_fixed);
+    set_fps_mode(platform::FpsMode::Fixed);
+  } else {
+    set_fps_mode(platform::FpsMode::Auto);
+  }
+
+  auto normalized = normalize_path(pending.emoji_atlas);
+  bool atlas_changed = normalized != m_current_emoji_path;
+  if (atlas_changed) {
+    if (load_atlas_from_path(normalized)) {
+      m_badges.clear();
+      m_spawn_times.clear();
+    } else {
+      normalized = m_current_emoji_path;
+    }
+  }
+
+  build_selector(pending.emoji, pending.emoji_weighted);
 }
 
 void Overlay::shutdown() {
@@ -798,6 +852,9 @@ void Overlay::run(std::stop_token st) {
   using clock = std::chrono::steady_clock;
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
+    if (m_has_pending_config.exchange(false, std::memory_order_acq_rel)) {
+      apply_pending_config();
+    }
     auto frame = std::chrono::microseconds(m_frame_interval_us.load());
     if (m_paused.load()) {
       std::this_thread::sleep_for(frame);

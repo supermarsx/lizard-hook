@@ -276,13 +276,29 @@ int main(int argc, char **argv) {
       }
       engine.shutdown();
       engine.init(cfg.sound_path(), cfg.volume_percent(), cfg.audio_backend());
+      overlay.refresh_from_config(cfg);
+      bool prev_enabled = tray_state.enabled;
+      bool prev_muted = tray_state.muted;
+      bool prev_fullscreen_pause = tray_state.fullscreen_pause;
+      auto prev_mode = tray_state.fps_mode;
+      int prev_fixed = tray_state.fps_fixed;
       tray_state.enabled = cfg.enabled();
       tray_state.muted = cfg.mute();
       tray_state.fullscreen_pause = cfg.fullscreen_pause();
+      auto new_mode = cfg.fps_mode() == "fixed" ? lizard::platform::FpsMode::Fixed
+                                                 : lizard::platform::FpsMode::Auto;
+      int new_fixed = cfg.fps_fixed();
+      tray_state.fps_mode = new_mode;
+      tray_state.fps_fixed = new_fixed;
       enabled = tray_state.enabled;
       muted = tray_state.muted;
       fullscreen_pause = tray_state.fullscreen_pause;
-      lizard::platform::update_tray(tray_state);
+      bool tray_changed = tray_state.enabled != prev_enabled || tray_state.muted != prev_muted ||
+                          tray_state.fullscreen_pause != prev_fullscreen_pause ||
+                          prev_mode != new_mode || prev_fixed != new_fixed;
+      if (tray_changed) {
+        lizard::platform::update_tray(tray_state);
+      }
       update_state();
     }
   });
