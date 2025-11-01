@@ -33,6 +33,7 @@ void stbi_image_free(void *);
 #include <deque>
 #include <mutex>
 #include <atomic>
+#include <queue>
 
 #include <climits>
 #ifdef _WIN32
@@ -101,6 +102,8 @@ public:
   void shutdown();
   void spawn_badge(int sprite, float x, float y);
   void spawn_badge(float x, float y);
+  void enqueue_spawn(int sprite, float x, float y);
+  void enqueue_spawn(float x, float y);
   void run(std::stop_token st);
   void stop();
   void refresh_from_config(const app::Config &cfg);
@@ -122,6 +125,7 @@ private:
   void render();
   void update_frame_interval();
   void apply_pending_config();
+  void process_spawn_queue();
   struct AtlasData {
     std::vector<Sprite> sprites;
     std::unordered_map<std::string, int> lookup;
@@ -133,6 +137,12 @@ private:
   void spawn_badge_locked(int sprite, float x, float y);
   static std::optional<std::filesystem::path>
   normalize_path(const std::optional<std::filesystem::path> &path);
+
+  struct SpawnRequest {
+    std::optional<int> sprite;
+    float x;
+    float y;
+  };
 
   struct PendingConfig {
     std::string spawn_strategy;
@@ -178,6 +188,8 @@ private:
   std::optional<PendingConfig> m_pending_config;
   std::atomic<bool> m_has_pending_config{false};
   std::mutex m_spawn_config_mutex;
+  std::mutex m_spawn_queue_mutex;
+  std::queue<SpawnRequest> m_spawn_queue;
 };
 
 void Overlay::update_frame_interval() {
@@ -759,6 +771,16 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   spawn_badge_locked(sprite, x, y);
 }
 
+void Overlay::enqueue_spawn(float x, float y) {
+  std::lock_guard<std::mutex> lock(m_spawn_queue_mutex);
+  m_spawn_queue.push(SpawnRequest{std::nullopt, x, y});
+}
+
+void Overlay::enqueue_spawn(int sprite, float x, float y) {
+  std::lock_guard<std::mutex> lock(m_spawn_queue_mutex);
+  m_spawn_queue.push(SpawnRequest{std::make_optional(sprite), x, y});
+}
+
 int Overlay::select_sprite_locked() {
   if (m_selector_indices.empty()) {
     return 0;
@@ -825,6 +847,23 @@ void Overlay::spawn_badge_locked(int sprite, float x, float y) {
   m_badges.emplace_back(Badge{px, py, vx, vy, phase, scale, 0.0f, rotation, 0.0f, lifetime, fade_in,
                               fade_out, sprite});
   m_spawn_times.push_back(now);
+}
+
+void Overlay::process_spawn_queue() {
+  std::queue<SpawnRequest> local;
+  {
+    std::lock_guard<std::mutex> lock(m_spawn_queue_mutex);
+    std::swap(local, m_spawn_queue);
+  }
+  while (!local.empty()) {
+    auto &request = local.front();
+    if (request.sprite.has_value()) {
+      spawn_badge(request.sprite.value(), request.x, request.y);
+    } else {
+      spawn_badge(request.x, request.y);
+    }
+    local.pop();
+  }
 }
 
 void Overlay::stop() { m_running = false; }
@@ -900,6 +939,7 @@ void Overlay::run(std::stop_token st) {
     if (m_has_pending_config.exchange(false, std::memory_order_acq_rel)) {
       apply_pending_config();
     }
+    process_spawn_queue();
     auto frame = std::chrono::microseconds(m_frame_interval_us.load());
     if (m_paused.load()) {
       std::this_thread::sleep_for(frame);
