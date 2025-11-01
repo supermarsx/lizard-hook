@@ -122,7 +122,12 @@ private:
   void render();
   void update_frame_interval();
   void apply_pending_config();
-  bool load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path);
+  struct AtlasData {
+    std::vector<Sprite> sprites;
+    std::unordered_map<std::string, int> lookup;
+    std::optional<std::filesystem::path> normalized_path;
+  };
+  std::optional<AtlasData> load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path);
   void build_selector(const std::vector<std::string> &emoji,
                       const std::unordered_map<std::string, double> &emoji_weighted);
   void spawn_badge_internal(int sprite, float x, float y, BadgeSpawnStrategy strategy,
@@ -238,9 +243,13 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   m_badges_per_second_max = cfg.badges_per_second_max();
   update_frame_interval();
 
+  auto emoji = cfg.emoji();
+  auto emoji_weighted = cfg.emoji_weighted();
   auto normalized_path = normalize_path(emoji_path);
+  std::optional<AtlasData> atlas;
 #ifdef LIZARD_TEST
-  if (!load_atlas_from_path(normalized_path)) {
+  atlas = load_atlas_from_path(normalized_path);
+  if (!atlas) {
     return false;
   }
 #else
@@ -307,12 +316,19 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
     return false;
   }
 
-  if (!load_atlas_from_path(normalized_path)) {
+  atlas = load_atlas_from_path(normalized_path);
+  if (!atlas) {
     return false;
   }
 #endif
 
-  build_selector(cfg.emoji(), cfg.emoji_weighted());
+  {
+    std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+    m_sprite_lookup = std::move(atlas->lookup);
+    m_sprites = std::move(atlas->sprites);
+    m_current_emoji_path = std::move(atlas->normalized_path);
+    build_selector(emoji, emoji_weighted);
+  }
 
   m_badge_capacity = 150;
   m_badges.reserve(m_badge_capacity);
@@ -462,7 +478,8 @@ Overlay::normalize_path(const std::optional<std::filesystem::path> &path) {
   return path->lexically_normal();
 }
 
-bool Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path) {
+std::optional<Overlay::AtlasData>
+Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path) {
   auto normalized = normalize_path(emoji_path);
   std::unordered_map<std::string, int> lookup;
   std::vector<Sprite> sprites;
@@ -477,7 +494,7 @@ bool Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &e
       g_overlay_log_called = true;
       spdlog::error("Failed to load emoji atlas {}: {}", normalized->string(),
                     stbi_failure_reason());
-      return false;
+      return std::nullopt;
     }
     stbi_image_free(pixels);
   }
@@ -499,7 +516,7 @@ bool Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &e
     } else {
       spdlog::error("Failed to load embedded emoji atlas: {}", stbi_failure_reason());
     }
-    return false;
+    return std::nullopt;
   }
 
   for (int i = 0; i < w * h; ++i) {
@@ -579,10 +596,11 @@ bool Overlay::load_atlas_from_path(const std::optional<std::filesystem::path> &e
     lookup["🦎"] = 0;
   }
 
-  m_sprite_lookup = std::move(lookup);
-  m_sprites = std::move(sprites);
-  m_current_emoji_path = normalized;
-  return true;
+  AtlasData data;
+  data.sprites = std::move(sprites);
+  data.lookup = std::move(lookup);
+  data.normalized_path = normalized;
+  return data;
 }
 
 void Overlay::build_selector(const std::vector<std::string> &emoji,
@@ -657,17 +675,25 @@ void Overlay::apply_pending_config() {
 
   auto normalized = normalize_path(pending.emoji_atlas);
   bool atlas_changed = normalized != m_current_emoji_path;
+  std::optional<AtlasData> atlas;
   if (atlas_changed) {
-    if (load_atlas_from_path(normalized)) {
+    atlas = load_atlas_from_path(normalized);
+    if (atlas) {
       m_badges.clear();
       m_spawn_times.clear();
     } else {
       normalized = m_current_emoji_path;
+      atlas.reset();
     }
   }
 
   {
     std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+    if (atlas) {
+      m_sprite_lookup = std::move(atlas->lookup);
+      m_sprites = std::move(atlas->sprites);
+      m_current_emoji_path = std::move(atlas->normalized_path);
+    }
     if (pending.spawn_strategy == "cursor_follow") {
       m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
     } else {
