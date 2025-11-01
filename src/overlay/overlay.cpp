@@ -117,6 +117,7 @@ public:
 private:
   friend struct ::OverlayTestAccess;
   int select_sprite();
+  int select_sprite_locked();
   void update(float dt);
   void render();
   void update_frame_interval();
@@ -124,6 +125,8 @@ private:
   bool load_atlas_from_path(const std::optional<std::filesystem::path> &emoji_path);
   void build_selector(const std::vector<std::string> &emoji,
                       const std::unordered_map<std::string, double> &emoji_weighted);
+  void spawn_badge_internal(int sprite, float x, float y, BadgeSpawnStrategy strategy,
+                            int badge_min_px, int badge_max_px, int badges_per_second_max);
   static std::optional<std::filesystem::path>
   normalize_path(const std::optional<std::filesystem::path> &path);
 
@@ -170,6 +173,7 @@ private:
   std::mutex m_pending_mutex;
   std::optional<PendingConfig> m_pending_config;
   std::atomic<bool> m_has_pending_config{false};
+  std::mutex m_spawn_config_mutex;
 };
 
 void Overlay::update_frame_interval() {
@@ -651,23 +655,6 @@ void Overlay::apply_pending_config() {
     m_pending_config.reset();
   }
 
-  if (pending.spawn_strategy == "cursor_follow") {
-    m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
-  } else {
-    m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
-  }
-
-  m_badge_min_px = pending.badge_min_px;
-  m_badge_max_px = pending.badge_max_px;
-  m_badges_per_second_max = pending.badges_per_second_max;
-
-  if (pending.fps_mode == "fixed") {
-    set_fps_fixed(pending.fps_fixed);
-    set_fps_mode(platform::FpsMode::Fixed);
-  } else {
-    set_fps_mode(platform::FpsMode::Auto);
-  }
-
   auto normalized = normalize_path(pending.emoji_atlas);
   bool atlas_changed = normalized != m_current_emoji_path;
   if (atlas_changed) {
@@ -679,7 +666,27 @@ void Overlay::apply_pending_config() {
     }
   }
 
-  build_selector(pending.emoji, pending.emoji_weighted);
+  {
+    std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+    if (pending.spawn_strategy == "cursor_follow") {
+      m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
+    } else {
+      m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
+    }
+
+    m_badge_min_px = pending.badge_min_px;
+    m_badge_max_px = pending.badge_max_px;
+    m_badges_per_second_max = pending.badges_per_second_max;
+
+    build_selector(pending.emoji, pending.emoji_weighted);
+  }
+
+  if (pending.fps_mode == "fixed") {
+    set_fps_fixed(pending.fps_fixed);
+    set_fps_mode(platform::FpsMode::Fixed);
+  } else {
+    set_fps_mode(platform::FpsMode::Auto);
+  }
 }
 
 void Overlay::shutdown() {
@@ -713,6 +720,45 @@ void Overlay::shutdown() {
 }
 
 int Overlay::select_sprite() {
+  std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+  return select_sprite_locked();
+}
+
+void Overlay::spawn_badge(float x, float y) {
+  int sprite = 0;
+  BadgeSpawnStrategy strategy = BadgeSpawnStrategy::RandomScreen;
+  int badge_min_px = m_badge_min_px;
+  int badge_max_px = m_badge_max_px;
+  int badges_per_second_max = m_badges_per_second_max;
+  {
+    std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+    sprite = select_sprite_locked();
+    strategy = m_spawn_strategy;
+    badge_min_px = m_badge_min_px;
+    badge_max_px = m_badge_max_px;
+    badges_per_second_max = m_badges_per_second_max;
+  }
+  spawn_badge_internal(sprite, x, y, strategy, badge_min_px, badge_max_px,
+                       badges_per_second_max);
+}
+
+void Overlay::spawn_badge(int sprite, float x, float y) {
+  BadgeSpawnStrategy strategy = BadgeSpawnStrategy::RandomScreen;
+  int badge_min_px = m_badge_min_px;
+  int badge_max_px = m_badge_max_px;
+  int badges_per_second_max = m_badges_per_second_max;
+  {
+    std::lock_guard<std::mutex> lock(m_spawn_config_mutex);
+    strategy = m_spawn_strategy;
+    badge_min_px = m_badge_min_px;
+    badge_max_px = m_badge_max_px;
+    badges_per_second_max = m_badges_per_second_max;
+  }
+  spawn_badge_internal(sprite, x, y, strategy, badge_min_px, badge_max_px,
+                       badges_per_second_max);
+}
+
+int Overlay::select_sprite_locked() {
   if (m_selector_indices.empty()) {
     return 0;
   }
@@ -720,9 +766,9 @@ int Overlay::select_sprite() {
   return m_selector_indices[idx];
 }
 
-void Overlay::spawn_badge(float x, float y) { spawn_badge(select_sprite(), x, y); }
-
-void Overlay::spawn_badge(int sprite, float x, float y) {
+void Overlay::spawn_badge_internal(int sprite, float x, float y, BadgeSpawnStrategy strategy,
+                                   int badge_min_px, int badge_max_px,
+                                   int badges_per_second_max) {
   if (m_badge_suppressed) {
     if (m_badges.size() < static_cast<std::size_t>(m_badge_capacity * 0.8f)) {
       m_badge_suppressed = false;
@@ -739,14 +785,14 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   while (!m_spawn_times.empty() && now - m_spawn_times.front() > std::chrono::seconds(1)) {
     m_spawn_times.pop_front();
   }
-  if (m_badges_per_second_max > 0 &&
-      static_cast<int>(m_spawn_times.size()) >= m_badges_per_second_max) {
+  if (badges_per_second_max > 0 &&
+      static_cast<int>(m_spawn_times.size()) >= badges_per_second_max) {
     return;
   }
 
   float px = x;
   float py = y;
-  if (m_spawn_strategy == BadgeSpawnStrategy::RandomScreen) {
+  if (strategy == BadgeSpawnStrategy::RandomScreen) {
     std::uniform_real_distribution<float> dist(0.0f, 1.0f);
     px = dist(m_rng);
     py = dist(m_rng);
@@ -762,8 +808,8 @@ void Overlay::spawn_badge(int sprite, float x, float y) {
   std::uniform_real_distribution<float> phaseDist(0.0f, 6.2831853f);
   float phase = phaseDist(m_rng);
 
-  std::uniform_real_distribution<float> diaDist(static_cast<float>(m_badge_min_px),
-                                                static_cast<float>(m_badge_max_px));
+  std::uniform_real_distribution<float> diaDist(static_cast<float>(badge_min_px),
+                                                static_cast<float>(badge_max_px));
   float diameter = diaDist(m_rng);
   float scale = (diameter * 2.0f) / m_view_height;
 
