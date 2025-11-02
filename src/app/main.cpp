@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
               bx = cx;
               by = cy;
             }
-            overlay.spawn_badge(bx, by);
+            overlay.enqueue_spawn(bx, by);
           }
         }
       },
