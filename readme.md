@@ -94,7 +94,8 @@ Copy this file to `lizard.json` and edit as needed.
 Common options include:
 
 - `enabled` and `mute` to toggle overlay and audio
-- `sound_cooldown_ms` and `max_concurrent_playbacks` to manage audio bursts
+- `max_concurrent_playbacks` to manage audio bursts (legacy `sound_cooldown_ms`
+  is deprecated and ignored)
 - `badges_per_second_max`, `badge_min_px`, `badge_max_px` to tune visuals
 - `fullscreen_pause` to suspend in full-screen apps
 - `exclude_processes` to ignore specific executables

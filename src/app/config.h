@@ -27,6 +27,7 @@ public:
   std::vector<std::string> emoji_pngs() const;
   std::optional<std::filesystem::path> sound_path() const;
   std::optional<std::filesystem::path> emoji_atlas() const;
+  // Deprecated: retained for compatibility; always returns 0.
   int sound_cooldown_ms() const;
   int max_concurrent_playbacks() const;
   int badges_per_second_max() const;
@@ -65,7 +66,7 @@ private:
   // config values
   bool enabled_{true};
   bool mute_{false};
-  int sound_cooldown_ms_{150};
+  int sound_cooldown_ms_{0};
   int max_concurrent_playbacks_{16};
   int badges_per_second_max_{12};
   int badge_min_px_{60};

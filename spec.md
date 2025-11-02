@@ -44,7 +44,7 @@ Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs)
 
 * On any keypress (including repeats):
 
-  * **Sound**: play once if at least `sound_cooldown_ms` elapsed since last trigger (default 150 ms).
+  * **Sound**: always trigger playback; bursts are limited by `max_concurrent_playbacks` via voice pooling.
   * **Badge**: spawn 1 circular badge at a random screen location (or near caret if available; see §11), limited by `badges_per_second_max` (default 12).
 * **Badge visuals**:
 
@@ -91,7 +91,7 @@ Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs)
 
 * **Default**: miniaudio (WASAPI shared), decoded PCM cached in RAM.
 * Low latency play calls; allow overlap (polyphony) up to `max_concurrent_playbacks` (default 16).
-* **Debounce** using `sound_cooldown_ms`.
+* Legacy `sound_cooldown_ms` is deprecated; voice pooling/LRU handles burst control.
 * **Volume** 0–100% (default 65%).
 * If device changes, auto-reinit.
 
@@ -107,7 +107,7 @@ Most third-party libs are vendored in `third_party/` as source (no dynamic DLLs)
 
   * `enabled` (bool, default true)
   * `mute` (bool, default false)
-  * `sound_cooldown_ms` (int, default 150)
+  * `sound_cooldown_ms` (deprecated; retained for backwards compatibility)
   * `max_concurrent_playbacks` (int, default 16)
   * `badges_per_second_max` (int, default 12)
   * `badge_min_px` / `badge_max_px` (int, default 60/108)

@@ -88,8 +88,7 @@ void Engine::endpoint_callback(ma_context *, ma_device_type deviceType,
   self->set_volume_locked(currentVol);
 }
 
-Engine::Engine(std::uint32_t maxPlaybacks, std::chrono::milliseconds cooldown)
-    : m_maxPlaybacks(maxPlaybacks), m_cooldown(cooldown) {}
+Engine::Engine(std::uint32_t maxPlaybacks) : m_maxPlaybacks(maxPlaybacks) {}
 
 Engine::~Engine() { shutdown(); }
 
@@ -195,10 +194,6 @@ void Engine::shutdown() {
 void Engine::play() {
   std::lock_guard<std::mutex> lock(m_mutex);
   auto now = std::chrono::steady_clock::now();
-  if ((now - m_lastPlay) < m_cooldown) {
-    return;
-  }
-  m_lastPlay = now;
 
   Voice *target = nullptr;
   for (auto &voice : m_voices) {
