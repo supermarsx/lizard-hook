@@ -251,14 +251,7 @@ int main(int argc, char **argv) {
             if (!muted.load()) {
               engine.play();
             }
-            float bx = 0.0f;
-            float by = 0.0f;
-            if (cfg.badge_spawn_strategy() == "cursor_follow") {
-              auto [cx, cy] = lizard::platform::cursor_pos();
-              bx = cx;
-              by = cy;
-            }
-            overlay.enqueue_spawn(bx, by);
+            overlay.enqueue_spawn(0.0f, 0.0f);
           }
         }
       },
