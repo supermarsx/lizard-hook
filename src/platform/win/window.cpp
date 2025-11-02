@@ -162,6 +162,20 @@ bool fullscreen_window_present() {
   return data.full;
 }
 
+void make_context_current(Window &window) {
+  if (window.device && window.glContext) {
+    wglMakeCurrent(static_cast<HDC>(window.device), static_cast<HGLRC>(window.glContext));
+  }
+}
+
+void clear_current_context(Window &) { wglMakeCurrent(nullptr, nullptr); }
+
+void swap_buffers(Window &window) {
+  if (window.device) {
+    SwapBuffers(static_cast<HDC>(window.device));
+  }
+}
+
 } // namespace lizard::platform
 
 #endif

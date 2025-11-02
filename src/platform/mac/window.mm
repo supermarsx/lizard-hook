@@ -141,6 +141,26 @@ bool fullscreen_window_present() {
   }
 }
 
+void make_context_current(Window &window) {
+  @autoreleasepool {
+    if (window.glContext) {
+      [(NSOpenGLContext *)window.glContext makeCurrentContext];
+    }
+  }
+}
+
+void clear_current_context(Window &) {
+  @autoreleasepool { [NSOpenGLContext clearCurrentContext]; }
+}
+
+void swap_buffers(Window &window) {
+  @autoreleasepool {
+    if (window.glContext) {
+      [(NSOpenGLContext *)window.glContext flushBuffer];
+    }
+  }
+}
+
 } // namespace lizard::platform
 
 #endif

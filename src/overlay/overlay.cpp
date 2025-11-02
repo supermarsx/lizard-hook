@@ -44,10 +44,6 @@ void stbi_image_free(void *);
 #include <CoreGraphics/CoreGraphics.h>
 #endif
 
-#ifdef __APPLE__
-#include <objc/message.h>
-#endif
-
 #ifndef LIZARD_TEST
 #include "embedded.h"
 #endif
@@ -464,6 +460,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
   glDeleteShader(vsId);
   glDeleteShader(fsId);
 
+  platform::clear_current_context(m_window);
+
 #endif
   m_running = true;
   return true;
@@ -716,29 +714,13 @@ void Overlay::apply_pending_config() {
 void Overlay::shutdown() {
 #ifndef LIZARD_TEST
   stop();
-  // Release GL resources after the render loop has stopped
-#ifdef _WIN32
-  if (m_window.device && m_window.glContext) {
-    wglMakeCurrent((HDC)m_window.device, (HGLRC)m_window.glContext);
-  }
-#elif defined(__linux__)
-  if (m_window.native && m_window.glContext) {
-    Display *dpy = glXGetCurrentDisplay();
-    if (dpy) {
-      glXMakeCurrent(dpy, (GLXDrawable)m_window.native, (GLXContext)m_window.glContext);
-    }
-  }
-#elif defined(__APPLE__)
-  if (m_window.glContext) {
-    auto makeCurrent = reinterpret_cast<void (*)(id, SEL)>(objc_msgSend);
-    makeCurrent((id)m_window.glContext, sel_getUid("makeCurrentContext"));
-  }
-#endif
+  platform::make_context_current(m_window);
   m_texture.reset();
   m_vbo.reset();
   m_instance.reset();
   m_vao.reset();
   m_program.reset();
+  platform::clear_current_context(m_window);
   platform::destroy_window(m_window);
 #endif
 }
@@ -888,12 +870,14 @@ void Overlay::render() {
   glBindVertexArray(m_vao.id);
   glBindTexture(GL_TEXTURE_2D, m_texture.id);
   glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(m_badges.size()));
+  platform::swap_buffers(m_window);
   platform::poll_events(m_window);
 #endif
 }
 
 void Overlay::run(std::stop_token st) {
 #ifndef LIZARD_TEST
+  platform::make_context_current(m_window);
   using clock = std::chrono::steady_clock;
   auto last = clock::now();
   while (m_running && !st.stop_requested()) {
@@ -918,6 +902,7 @@ void Overlay::run(std::stop_token st) {
       std::this_thread::sleep_for(frame - spend);
     }
   }
+  platform::clear_current_context(m_window);
   stop();
 #else
   (void)st;

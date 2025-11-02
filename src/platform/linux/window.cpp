@@ -250,4 +250,26 @@ bool fullscreen_window_present() {
   return full;
 }
 
+void make_context_current(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
+  if (g_display && window.native && window.glContext) {
+    glXMakeCurrent(g_display, static_cast<GLXDrawable>(reinterpret_cast<::Window>(window.native)),
+                   window.glContext);
+  }
+}
+
+void clear_current_context(Window &) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
+  if (g_display) {
+    glXMakeCurrent(g_display, None, nullptr);
+  }
+}
+
+void swap_buffers(Window &window) {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
+  if (g_display && window.native) {
+    glXSwapBuffers(g_display, static_cast<GLXDrawable>(reinterpret_cast<::Window>(window.native)));
+  }
+}
+
 } // namespace lizard::platform
