@@ -312,6 +312,7 @@ int main(int argc, char **argv) {
   fullscreen_thread.request_stop();
   overlay_thread.request_stop();
   hook->stop();
+  overlay_thread.join();
   overlay.shutdown();
   engine.shutdown();
   lizard::platform::shutdown_tray();

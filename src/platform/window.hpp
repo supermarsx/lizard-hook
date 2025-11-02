@@ -38,6 +38,9 @@ void destroy_window(Window &window);
 void poll_events(Window &window);
 bool fullscreen_window_present();
 std::pair<float, float> cursor_pos();
+void make_context_current(Window &window);
+void clear_current_context(Window &window);
+void swap_buffers(Window &window);
 #if defined(__linux__)
 void init_xlib_threads();
 #endif
