@@ -135,7 +135,12 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
     exclude_processes_ = j.value("exclude_processes", std::vector<std::string>{});
     ignore_injected_ = j.value("ignore_injected", true);
     audio_backend_ = j.value("audio_backend", std::string("miniaudio"));
-    badge_spawn_strategy_ = j.value("badge_spawn_strategy", std::string("random_screen"));
+    auto strategy_in = j.value("badge_spawn_strategy", std::string("random_screen"));
+    if (strategy_in != "random_screen" && strategy_in != "near_caret") {
+      spdlog::warn("Unknown badge_spawn_strategy ({}); defaulting to random_screen", strategy_in);
+      strategy_in = "random_screen";
+    }
+    badge_spawn_strategy_ = std::move(strategy_in);
     fps_mode_ = j.value("fps_mode", std::string("auto"));
     fps_fixed_ = clamp_nonneg(j.value("fps_fixed", 60), "fps_fixed");
     if (fps_fixed_ <= 0) {

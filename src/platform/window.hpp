@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <utility>
+#include <optional>
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__linux__)
@@ -38,6 +39,7 @@ void destroy_window(Window &window);
 void poll_events(Window &window);
 bool fullscreen_window_present();
 std::pair<float, float> cursor_pos();
+std::optional<std::pair<float, float>> caret_pos();
 void make_context_current(Window &window);
 void clear_current_context(Window &window);
 void swap_buffers(Window &window);

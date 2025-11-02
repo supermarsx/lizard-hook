@@ -43,6 +43,7 @@ void stbi_image_free(void *);
 #include <X11/extensions/Xrandr.h>
 #elif defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
+#include <CoreFoundation/CoreFoundation.h>
 #endif
 
 #ifndef LIZARD_TEST
@@ -87,9 +88,244 @@ struct Badge {
   int sprite;
 };
 
+struct MonitorBounds {
+  float left;
+  float top;
+  float right;
+  float bottom;
+};
+
+#ifdef LIZARD_TEST
+namespace test {
+  static std::optional<std::vector<MonitorBounds>> g_monitors_override;
+  static std::optional<std::size_t> g_foreground_monitor_override;
+
+  void set_monitors(std::vector<MonitorBounds> monitors) {
+    g_monitors_override = std::move(monitors);
+  }
+
+  void clear_monitors() { g_monitors_override.reset(); }
+
+  void set_foreground_monitor(std::optional<std::size_t> index) {
+    g_foreground_monitor_override = index;
+  }
+
+  void clear_foreground_monitor() { g_foreground_monitor_override.reset(); }
+
+  void reset_spawn_overrides() {
+    g_monitors_override.reset();
+    g_foreground_monitor_override.reset();
+  }
+} // namespace test
+#endif
+
+namespace {
+
+std::vector<MonitorBounds> query_system_monitors() {
+  std::vector<MonitorBounds> monitors;
+#ifdef _WIN32
+  EnumDisplayMonitors(
+      nullptr, nullptr,
+      [](HMONITOR, HDC, LPRECT rect, LPARAM param) -> BOOL {
+        auto *out = reinterpret_cast<std::vector<MonitorBounds> *>(param);
+        if (rect) {
+          out->push_back(MonitorBounds{static_cast<float>(rect->left), static_cast<float>(rect->top),
+                                       static_cast<float>(rect->right),
+                                       static_cast<float>(rect->bottom)});
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&monitors));
+#elif defined(__APPLE__)
+  uint32_t count = 0;
+  if (CGGetActiveDisplayList(0, nullptr, &count) == kCGErrorSuccess && count > 0) {
+    std::vector<CGDirectDisplayID> displays(count);
+    if (CGGetActiveDisplayList(count, displays.data(), &count) == kCGErrorSuccess) {
+      for (uint32_t i = 0; i < count; ++i) {
+        CGRect bounds = CGDisplayBounds(displays[i]);
+        monitors.push_back(MonitorBounds{static_cast<float>(bounds.origin.x),
+                                         static_cast<float>(bounds.origin.y),
+                                         static_cast<float>(bounds.origin.x + bounds.size.width),
+                                         static_cast<float>(bounds.origin.y + bounds.size.height)});
+      }
+    }
+  }
+#elif defined(__linux__)
+  platform::init_xlib_threads();
+  if (Display *dpy = XOpenDisplay(nullptr)) {
+    ::Window root = DefaultRootWindow(dpy);
+    int nmon = 0;
+    if (XRRMonitorInfo *info = XRRGetMonitors(dpy, root, True, &nmon)) {
+      for (int i = 0; i < nmon; ++i) {
+        monitors.push_back(MonitorBounds{static_cast<float>(info[i].x), static_cast<float>(info[i].y),
+                                         static_cast<float>(info[i].x + info[i].width),
+                                         static_cast<float>(info[i].y + info[i].height)});
+      }
+      XRRFreeMonitors(info);
+    } else {
+      int screen = DefaultScreen(dpy);
+      monitors.push_back(MonitorBounds{0.0f, 0.0f, static_cast<float>(DisplayWidth(dpy, screen)),
+                                       static_cast<float>(DisplayHeight(dpy, screen))});
+    }
+    XCloseDisplay(dpy);
+  }
+#endif
+  return monitors;
+}
+
+std::optional<MonitorBounds> query_system_foreground_monitor() {
+#ifdef _WIN32
+  HWND foreground = GetForegroundWindow();
+  if (!foreground) {
+    return std::nullopt;
+  }
+  HMONITOR monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
+  if (!monitor) {
+    monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTOPRIMARY);
+  }
+  if (!monitor) {
+    return std::nullopt;
+  }
+  MONITORINFO info{};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfo(monitor, &info)) {
+    return std::nullopt;
+  }
+  RECT rc = info.rcMonitor;
+  return MonitorBounds{static_cast<float>(rc.left), static_cast<float>(rc.top),
+                       static_cast<float>(rc.right), static_cast<float>(rc.bottom)};
+#elif defined(__APPLE__)
+  CFArrayRef list = CGWindowListCopyWindowInfo(
+      kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+  if (!list) {
+    return std::nullopt;
+  }
+  CGRect bounds{};
+  bool found = false;
+  CFIndex count = CFArrayGetCount(list);
+  for (CFIndex i = 0; i < count && !found; ++i) {
+    auto dict = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(list, i));
+    if (!dict) {
+      continue;
+    }
+    CFNumberRef layer = static_cast<CFNumberRef>(CFDictionaryGetValue(dict, kCGWindowLayer));
+    int layer_value = 0;
+    if (!layer || !CFNumberGetValue(layer, kCFNumberIntType, &layer_value) || layer_value != 0) {
+      continue;
+    }
+    auto bounds_dict = static_cast<CFDictionaryRef>(CFDictionaryGetValue(dict, kCGWindowBounds));
+    if (bounds_dict && CGRectMakeWithDictionaryRepresentation(bounds_dict, &bounds)) {
+      found = true;
+    }
+  }
+  CFRelease(list);
+  if (!found) {
+    return std::nullopt;
+  }
+  auto monitors = query_system_monitors();
+  double center_x = bounds.origin.x + bounds.size.width * 0.5;
+  double center_y = bounds.origin.y + bounds.size.height * 0.5;
+  for (const auto &m : monitors) {
+    if (center_x >= m.left && center_x <= m.right && center_y >= m.top && center_y <= m.bottom) {
+      return m;
+    }
+  }
+  if (!monitors.empty()) {
+    return monitors.front();
+  }
+  return std::nullopt;
+#elif defined(__linux__)
+  platform::init_xlib_threads();
+  Display *dpy = XOpenDisplay(nullptr);
+  if (!dpy) {
+    return std::nullopt;
+  }
+  ::Window root = DefaultRootWindow(dpy);
+  Atom active_atom = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
+  if (active_atom == None) {
+    XCloseDisplay(dpy);
+    return std::nullopt;
+  }
+  Atom actual_type = None;
+  int actual_format = 0;
+  unsigned long nitems = 0;
+  unsigned long bytes = 0;
+  unsigned char *data = nullptr;
+  if (XGetWindowProperty(dpy, root, active_atom, 0, ~0L, False, XA_WINDOW, &actual_type, &actual_format,
+                         &nitems, &bytes, &data) != Success || !data || nitems == 0) {
+    if (data) {
+      XFree(data);
+    }
+    XCloseDisplay(dpy);
+    return std::nullopt;
+  }
+  ::Window active = reinterpret_cast<::Window *>(data)[0];
+  XFree(data);
+  if (!active) {
+    XCloseDisplay(dpy);
+    return std::nullopt;
+  }
+  XWindowAttributes attrs{};
+  if (!XGetWindowAttributes(dpy, active, &attrs)) {
+    XCloseDisplay(dpy);
+    return std::nullopt;
+  }
+  int abs_x = attrs.x;
+  int abs_y = attrs.y;
+  ::Window child;
+  if (XTranslateCoordinates(dpy, active, root, 0, 0, &abs_x, &abs_y, &child) == False) {
+    abs_x = attrs.x;
+    abs_y = attrs.y;
+  }
+  double center_x = abs_x + attrs.width * 0.5;
+  double center_y = abs_y + attrs.height * 0.5;
+  XCloseDisplay(dpy);
+  auto monitors = query_system_monitors();
+  for (const auto &m : monitors) {
+    if (center_x >= m.left && center_x <= m.right && center_y >= m.top && center_y <= m.bottom) {
+      return m;
+    }
+  }
+  if (!monitors.empty()) {
+    return monitors.front();
+  }
+  return std::nullopt;
+#else
+  return std::nullopt;
+#endif
+}
+
+} // namespace
+
+static std::vector<MonitorBounds> active_monitors() {
+#ifdef LIZARD_TEST
+  if (test::g_monitors_override) {
+    return *test::g_monitors_override;
+  }
+#endif
+  return query_system_monitors();
+}
+
+static std::optional<MonitorBounds> foreground_monitor(const std::vector<MonitorBounds> &monitors) {
+#ifdef LIZARD_TEST
+  if (test::g_foreground_monitor_override) {
+    std::size_t idx = *test::g_foreground_monitor_override;
+    if (idx < monitors.size()) {
+      return monitors[idx];
+    }
+    return std::nullopt;
+  }
+#endif
+  auto monitor = query_system_foreground_monitor();
+  if (monitor) {
+    return monitor;
+  }
+  return std::nullopt;
+}
+
 enum class BadgeSpawnStrategy {
   RandomScreen,
-  CursorFollow,
+  NearCaret,
 };
 
 class Overlay {
@@ -160,6 +396,8 @@ private:
   int m_badge_max_px = 108;
   float m_view_width = 1.0f;
   float m_view_height = 1.0f;
+  float m_virtual_origin_x = 0.0f;
+  float m_virtual_origin_y = 0.0f;
   std::vector<float> m_instanceData;
   std::vector<Sprite> m_sprites;
   std::unordered_map<std::string, int> m_sprite_lookup;
@@ -234,8 +472,8 @@ void Overlay::update_frame_interval() {
 
 bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> emoji_path) {
   auto strategy = cfg.badge_spawn_strategy();
-  if (strategy == "cursor_follow") {
-    m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
+  if (strategy == "near_caret") {
+    m_spawn_strategy = BadgeSpawnStrategy::NearCaret;
   } else {
     m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
   }
@@ -318,6 +556,8 @@ bool Overlay::init(const app::Config &cfg, std::optional<std::filesystem::path> 
 #endif
   m_view_width = static_cast<float>(desc.width);
   m_view_height = static_cast<float>(desc.height);
+  m_virtual_origin_x = static_cast<float>(desc.x);
+  m_virtual_origin_y = static_cast<float>(desc.y);
   m_window = platform::create_overlay_window(desc);
   if (!m_window.native) {
     return false;
@@ -702,8 +942,8 @@ void Overlay::apply_pending_config() {
       m_sprites = std::move(atlas->sprites);
       m_current_emoji_path = std::move(atlas->normalized_path);
     }
-    if (pending.spawn_strategy == "cursor_follow") {
-      m_spawn_strategy = BadgeSpawnStrategy::CursorFollow;
+    if (pending.spawn_strategy == "near_caret") {
+      m_spawn_strategy = BadgeSpawnStrategy::NearCaret;
     } else {
       m_spawn_strategy = BadgeSpawnStrategy::RandomScreen;
     }
@@ -793,12 +1033,91 @@ void Overlay::spawn_badge_locked(int sprite, float x, float y) {
     return;
   }
 
-  float px = x;
-  float py = y;
+  auto monitors = active_monitors();
+  if (monitors.empty()) {
+    monitors.push_back(MonitorBounds{m_virtual_origin_x, m_virtual_origin_y,
+                                     m_virtual_origin_x + std::max(m_view_width, 1.0f),
+                                     m_virtual_origin_y + std::max(m_view_height, 1.0f)});
+  }
+
+  auto normalized_from_absolute = [&](float abs_x, float abs_y) {
+    float width = m_view_width > 0.0f ? m_view_width : 1.0f;
+    float height = m_view_height > 0.0f ? m_view_height : 1.0f;
+    float nx = (abs_x - m_virtual_origin_x) / width;
+    float ny = (abs_y - m_virtual_origin_y) / height;
+    nx = std::clamp(nx, 0.0f, 1.0f);
+    ny = std::clamp(ny, 0.0f, 1.0f);
+    return std::pair<float, float>{nx, ny};
+  };
+
+  auto sample_point_in_monitor = [&](const MonitorBounds &bounds) {
+    constexpr float inset = 24.0f;
+    float left = bounds.left + inset;
+    float right = bounds.right - inset;
+    float top = bounds.top + inset;
+    float bottom = bounds.bottom - inset;
+    if (right <= left) {
+      float mid = (bounds.left + bounds.right) * 0.5f;
+      left = right = mid;
+    }
+    if (bottom <= top) {
+      float mid = (bounds.top + bounds.bottom) * 0.5f;
+      top = bottom = mid;
+    }
+    float abs_x = left;
+    float abs_y = top;
+    if (right > left) {
+      std::uniform_real_distribution<float> dist_x(left, right);
+      abs_x = dist_x(m_rng);
+    }
+    if (bottom > top) {
+      std::uniform_real_distribution<float> dist_y(top, bottom);
+      abs_y = dist_y(m_rng);
+    }
+    return normalized_from_absolute(abs_x, abs_y);
+  };
+
+  float px = std::clamp(x, 0.0f, 1.0f);
+  float py = std::clamp(y, 0.0f, 1.0f);
   if (m_spawn_strategy == BadgeSpawnStrategy::RandomScreen) {
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-    px = dist(m_rng);
-    py = dist(m_rng);
+    std::vector<double> weights;
+    weights.reserve(monitors.size());
+    constexpr float inset = 24.0f;
+    for (const auto &m : monitors) {
+      float width = std::max(0.0f, m.right - m.left);
+      float height = std::max(0.0f, m.bottom - m.top);
+      float usable_width = std::max(0.0f, width - inset * 2.0f);
+      float usable_height = std::max(0.0f, height - inset * 2.0f);
+      double area = static_cast<double>(usable_width) * static_cast<double>(usable_height);
+      if (area <= 0.0 && width > 0.0f && height > 0.0f) {
+        area = static_cast<double>(width) * static_cast<double>(height);
+      }
+      if (area <= 0.0) {
+        area = 1.0;
+      }
+      weights.push_back(area);
+    }
+    std::discrete_distribution<std::size_t> monitor_dist(weights.begin(), weights.end());
+    std::size_t idx = monitor_dist(m_rng);
+    auto sampled = sample_point_in_monitor(monitors[idx]);
+    px = sampled.first;
+    py = sampled.second;
+  } else if (m_spawn_strategy == BadgeSpawnStrategy::NearCaret) {
+    if (auto caret = lizard::platform::caret_pos()) {
+      auto norm = normalized_from_absolute(caret->first, caret->second);
+      px = norm.first;
+      py = norm.second;
+    } else {
+      auto fg = foreground_monitor(monitors);
+      if (!fg && !monitors.empty()) {
+        fg = monitors.front();
+      }
+      if (fg) {
+        auto sampled = sample_point_in_monitor(*fg);
+        px = sampled.first;
+        py = sampled.second;
+      }
+    }
   }
 
   std::uniform_real_distribution<float> angleDist(-0.3f, 0.3f);

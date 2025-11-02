@@ -9,6 +9,7 @@
 #include <vector>
 #include <mutex>
 #include <algorithm>
+#include <optional>
 
 namespace lizard::platform {
 
@@ -176,6 +177,48 @@ std::pair<float, float> cursor_pos() {
   x = std::clamp(x, 0.0f, 1.0f);
   y = std::clamp(y, 0.0f, 1.0f);
   return {x, y};
+}
+
+std::optional<std::pair<float, float>> caret_pos() {
+  std::lock_guard<std::mutex> lock(g_display_mutex);
+  if (!g_display) {
+    return std::nullopt;
+  }
+  Atom active_atom = XInternAtom(g_display, "_NET_ACTIVE_WINDOW", False);
+  if (active_atom == None) {
+    return std::nullopt;
+  }
+  Atom actual_type = None;
+  int actual_format = 0;
+  unsigned long nitems = 0;
+  unsigned long bytes = 0;
+  unsigned char *data = nullptr;
+  if (XGetWindowProperty(g_display, g_root, active_atom, 0, ~0L, False, XA_WINDOW, &actual_type,
+                         &actual_format, &nitems, &bytes, &data) != Success || !data || nitems == 0) {
+    if (data) {
+      XFree(data);
+    }
+    return std::nullopt;
+  }
+  ::Window active = reinterpret_cast<::Window *>(data)[0];
+  XFree(data);
+  if (!active || active == g_overlay) {
+    return std::nullopt;
+  }
+  XWindowAttributes attrs{};
+  if (!XGetWindowAttributes(g_display, active, &attrs)) {
+    return std::nullopt;
+  }
+  int abs_x = attrs.x;
+  int abs_y = attrs.y;
+  ::Window child;
+  if (XTranslateCoordinates(g_display, active, g_root, 0, 0, &abs_x, &abs_y, &child) == False) {
+    abs_x = attrs.x;
+    abs_y = attrs.y;
+  }
+  float center_x = abs_x + attrs.width * 0.5f;
+  float center_y = abs_y + attrs.height * 0.5f;
+  return std::pair<float, float>{center_x, center_y};
 }
 
 bool fullscreen_window_present() {

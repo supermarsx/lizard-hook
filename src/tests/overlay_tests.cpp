@@ -5,6 +5,8 @@
 #include <fstream>
 #include <sstream>
 #include <spdlog/sinks/ostream_sink.h>
+#include <optional>
+#include <utility>
 
 #define private public
 #include "app/config.h"
@@ -36,6 +38,22 @@ std::pair<float, float> cursor_pos() { return {0.0f, 0.0f}; }
 } // namespace lizard::platform
 #endif
 
+namespace lizard::overlay::test {
+void set_monitors(std::vector<lizard::overlay::MonitorBounds> monitors);
+void clear_monitors();
+void set_foreground_monitor(std::optional<std::size_t> index);
+void clear_foreground_monitor();
+void reset_spawn_overrides();
+} // namespace lizard::overlay::test
+
+namespace {
+std::optional<std::pair<float, float>> g_test_caret;
+}
+
+namespace lizard::platform {
+std::optional<std::pair<float, float>> caret_pos() { return g_test_caret; }
+}
+
 struct OverlayTestAccess {
   static std::vector<lizard::overlay::Sprite> &sprites(lizard::overlay::Overlay &o) {
     return o.m_sprites;
@@ -53,6 +71,26 @@ struct OverlayTestAccess {
   static std::vector<lizard::overlay::Badge> &badges(lizard::overlay::Overlay &o) {
     return o.m_badges;
   }
+  static void set_view(lizard::overlay::Overlay &o, float width, float height, float origin_x,
+                       float origin_y) {
+    o.m_view_width = width;
+    o.m_view_height = height;
+    o.m_virtual_origin_x = origin_x;
+    o.m_virtual_origin_y = origin_y;
+  }
+  static void set_monitors(std::vector<lizard::overlay::MonitorBounds> monitors) {
+    lizard::overlay::test::set_monitors(std::move(monitors));
+  }
+  static void clear_monitors() { lizard::overlay::test::clear_monitors(); }
+  static void set_foreground(std::optional<std::size_t> index) {
+    lizard::overlay::test::set_foreground_monitor(index);
+  }
+  static void clear_foreground() { lizard::overlay::test::clear_foreground_monitor(); }
+  static void reset_overrides() {
+    lizard::overlay::test::reset_spawn_overrides();
+    g_test_caret.reset();
+  }
+  static void set_caret(std::optional<std::pair<float, float>> caret) { g_test_caret = caret; }
 };
 
 bool g_overlay_log_called = false;
@@ -182,29 +220,57 @@ TEST_CASE("GL resources released when Overlay is destroyed", "[overlay]") {
 }
 
 TEST_CASE("random_screen strategy randomizes badge position", "[overlay]") {
+  OverlayTestAccess::reset_overrides();
   Config cfg(std::filesystem::temp_directory_path());
   cfg.badge_spawn_strategy_ = "random_screen";
   Overlay ov;
   ov.init(cfg);
+  OverlayTestAccess::set_view(ov, 1920.0f, 1080.0f, 0.0f, 0.0f);
+  OverlayTestAccess::set_monitors({lizard::overlay::MonitorBounds{0.0f, 0.0f, 1920.0f, 1080.0f}});
   OverlayTestAccess::rng(ov).seed(1337);
   ov.spawn_badge(0, 0.0f, 0.0f);
   auto &b = OverlayTestAccess::badges(ov).back();
-  REQUIRE(b.x == Approx(0.262025f));
-  REQUIRE(b.y == Approx(0.56053f));
+  REQUIRE(b.x == Approx(0.267974f));
+  REQUIRE(b.y == Approx(0.55784f));
+  OverlayTestAccess::reset_overrides();
 }
 
-TEST_CASE("cursor_follow strategy uses provided coordinates", "[overlay]") {
+TEST_CASE("near_caret strategy uses caret coordinates when available", "[overlay]") {
+  OverlayTestAccess::reset_overrides();
   Config cfg(std::filesystem::temp_directory_path());
-  cfg.badge_spawn_strategy_ = "cursor_follow";
+  cfg.badge_spawn_strategy_ = "near_caret";
   Overlay ov;
   ov.init(cfg);
-  ov.spawn_badge(0, 0.25f, 0.75f);
+  OverlayTestAccess::set_view(ov, 1920.0f, 1080.0f, 0.0f, 0.0f);
+  OverlayTestAccess::set_monitors({lizard::overlay::MonitorBounds{0.0f, 0.0f, 1920.0f, 1080.0f}});
+  OverlayTestAccess::set_caret(std::make_optional(std::pair<float, float>{960.0f, 540.0f}));
+  ov.spawn_badge(0, 0.0f, 0.0f);
   auto &b = OverlayTestAccess::badges(ov).back();
-  REQUIRE(b.x == Approx(0.25f));
-  REQUIRE(b.y == Approx(0.75f));
+  REQUIRE(b.x == Approx(0.5f));
+  REQUIRE(b.y == Approx(0.5f));
+  OverlayTestAccess::reset_overrides();
+}
+
+TEST_CASE("near_caret strategy falls back to foreground monitor", "[overlay]") {
+  OverlayTestAccess::reset_overrides();
+  Config cfg(std::filesystem::temp_directory_path());
+  cfg.badge_spawn_strategy_ = "near_caret";
+  Overlay ov;
+  ov.init(cfg);
+  OverlayTestAccess::set_view(ov, 3840.0f, 1080.0f, 0.0f, 0.0f);
+  OverlayTestAccess::set_monitors({lizard::overlay::MonitorBounds{0.0f, 0.0f, 1920.0f, 1080.0f},
+                                   lizard::overlay::MonitorBounds{1920.0f, 0.0f, 3840.0f, 1080.0f}});
+  OverlayTestAccess::set_foreground(1);
+  OverlayTestAccess::rng(ov).seed(1337);
+  ov.spawn_badge(0, 0.0f, 0.0f);
+  auto &b = OverlayTestAccess::badges(ov).back();
+  REQUIRE(b.x == Approx(0.633987f));
+  REQUIRE(b.y == Approx(0.55784f));
+  OverlayTestAccess::reset_overrides();
 }
 
 TEST_CASE("badge spawns respect per-second limit", "[overlay]") {
+  OverlayTestAccess::reset_overrides();
   Config cfg(std::filesystem::temp_directory_path());
   cfg.badges_per_second_max_ = 2;
   Overlay ov;
@@ -213,4 +279,5 @@ TEST_CASE("badge spawns respect per-second limit", "[overlay]") {
   ov.spawn_badge(0, 0.0f, 0.0f);
   ov.spawn_badge(0, 0.0f, 0.0f);
   REQUIRE(OverlayTestAccess::badges(ov).size() == 2);
+  OverlayTestAccess::reset_overrides();
 }

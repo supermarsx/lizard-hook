@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <vector>
+#include <optional>
 #pragma comment(lib, "dwmapi.lib")
 
 namespace lizard::platform {
@@ -117,6 +118,28 @@ std::pair<float, float> cursor_pos() {
   x = std::clamp(x, 0.0f, 1.0f);
   y = std::clamp(y, 0.0f, 1.0f);
   return {x, y};
+}
+
+std::optional<std::pair<float, float>> caret_pos() {
+  GUITHREADINFO info{};
+  info.cbSize = sizeof(info);
+  HWND foreground = GetForegroundWindow();
+  DWORD thread_id = 0;
+  if (foreground) {
+    thread_id = GetWindowThreadProcessId(foreground, nullptr);
+  }
+  if (!GetGUIThreadInfo(thread_id, &info)) {
+    return std::nullopt;
+  }
+  HWND caret_hwnd = info.hwndCaret ? info.hwndCaret : info.hwndFocus;
+  if (!caret_hwnd) {
+    caret_hwnd = foreground;
+  }
+  POINT caret_pos{info.rcCaret.left, info.rcCaret.bottom};
+  if (!caret_hwnd || !ClientToScreen(caret_hwnd, &caret_pos)) {
+    return std::nullopt;
+  }
+  return std::pair<float, float>{static_cast<float>(caret_pos.x), static_cast<float>(caret_pos.y)};
 }
 
 bool fullscreen_window_present() {

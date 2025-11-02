@@ -5,6 +5,8 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <algorithm>
 #include <vector>
+#include <optional>
+#include <ApplicationServices/ApplicationServices.h>
 
 namespace lizard::platform {
 
@@ -101,6 +103,47 @@ std::pair<float, float> cursor_pos() {
     x = std::clamp(x, 0.0f, 1.0f);
     y = std::clamp(y, 0.0f, 1.0f);
     return {x, y};
+  }
+}
+
+std::optional<std::pair<float, float>> caret_pos() {
+  @autoreleasepool {
+    AXUIElementRef systemWide = AXUIElementCreateSystemWide();
+    if (!systemWide) {
+      return std::nullopt;
+    }
+    AXUIElementRef focused = nullptr;
+    if (AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute,
+                                      reinterpret_cast<CFTypeRef *>(&focused)) != kAXErrorSuccess ||
+        !focused) {
+      CFRelease(systemWide);
+      return std::nullopt;
+    }
+    CGPoint position{0, 0};
+    CGSize size{0, 0};
+    AXValueRef value = nullptr;
+    if (AXUIElementCopyAttributeValue(focused, kAXPositionAttribute,
+                                      reinterpret_cast<CFTypeRef *>(&value)) == kAXErrorSuccess && value &&
+        AXValueGetType(value) == kAXValueCGPointType) {
+      AXValueGetValue(value, kAXValueCGPointType, &position);
+    }
+    if (value) {
+      CFRelease(value);
+      value = nullptr;
+    }
+    if (AXUIElementCopyAttributeValue(focused, kAXSizeAttribute,
+                                      reinterpret_cast<CFTypeRef *>(&value)) == kAXErrorSuccess && value &&
+        AXValueGetType(value) == kAXValueCGSizeType) {
+      AXValueGetValue(value, kAXValueCGSizeType, &size);
+    }
+    if (value) {
+      CFRelease(value);
+    }
+    CFRelease(focused);
+    CFRelease(systemWide);
+    float x = position.x + static_cast<float>(size.width) * 0.5f;
+    float y = position.y + static_cast<float>(size.height) * 0.5f;
+    return std::pair<float, float>{x, y};
   }
 }
 
