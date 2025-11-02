@@ -96,6 +96,7 @@ std::filesystem::path Config::user_config_path() {
 void Config::load(std::unique_lock<std::shared_mutex> &lock) {
   (void)lock; // lock is held by caller
   logging_path_ = config_path_.parent_path() / "lizard.log";
+  sound_cooldown_ms_ = 0;
   std::ifstream in(config_path_);
   if (!in.is_open()) {
     spdlog::warn("Could not open config file: {}", config_path_.string());
@@ -119,7 +120,13 @@ void Config::load(std::unique_lock<std::shared_mutex> &lock) {
       return value;
     };
 
-    sound_cooldown_ms_ = clamp_nonneg(j.value("sound_cooldown_ms", 150), "sound_cooldown_ms");
+    if (j.contains("sound_cooldown_ms")) {
+      int requested = clamp_nonneg(j.value("sound_cooldown_ms", 0), "sound_cooldown_ms");
+      if (requested > 0) {
+        spdlog::warn(
+            "sound_cooldown_ms is deprecated and ignored; bursts are limited by max_concurrent_playbacks");
+      }
+    }
     max_concurrent_playbacks_ =
         clamp_nonneg(j.value("max_concurrent_playbacks", 16), "max_concurrent_playbacks");
     badges_per_second_max_ =

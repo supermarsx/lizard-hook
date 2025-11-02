@@ -136,7 +136,7 @@ Keys (subset):
 
 - `mute` (bool, default false)
 
-- `sound_cooldown_ms` (int, default 150)
+- `sound_cooldown_ms` (deprecated; retained for backwards compatibility)
 
 - `max_concurrent_playbacks` (int, default 16)
 
@@ -168,7 +168,8 @@ Keys (subset):
 
 - **Keyboard**: physical keydown triggers → enqueue sound (polyphonic) + badge spawn (rate‑limited).
 
-- **Audio**: debounce via `sound_cooldown_ms`; never cut playing voices; LRU drop when > `max_concurrent_playbacks`.
+- **Audio**: rely on voice pooling/`max_concurrent_playbacks`; legacy `sound_cooldown_ms` is deprecated. Never cut playing voices beyond
+  the configured limit (use LRU eviction).
 
 - **Overlay**: click‑through, topmost, no focus change; GL render loop targets display refresh (auto detect; fallback 60 FPS). Back‑pressure if active badges >150; resume at <80.
 

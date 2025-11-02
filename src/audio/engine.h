@@ -21,8 +21,7 @@ namespace lizard::audio {
 
 class Engine {
 public:
-  Engine(std::uint32_t maxPlaybacks = 16,
-         std::chrono::milliseconds cooldown = std::chrono::milliseconds(150));
+  Engine(std::uint32_t maxPlaybacks = 16);
   ~Engine();
 
   bool init(std::optional<std::filesystem::path> sound_path = std::nullopt,
@@ -47,8 +46,6 @@ private:
   ma_audio_buffer m_buffer{};
   std::vector<Voice> m_voices;
   std::uint32_t m_maxPlaybacks = 0;
-  std::chrono::steady_clock::time_point m_lastPlay{};
-  std::chrono::milliseconds m_cooldown{};
   float m_volume{1.0f};
   std::optional<std::filesystem::path> m_soundPath{};
   int m_volumePercent{100};

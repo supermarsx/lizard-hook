@@ -208,7 +208,7 @@ TEST_CASE("logs warnings for adjusted values", "[config]") {
   auto tempdir = std::filesystem::temp_directory_path();
   auto cfg_file = tempdir / "lizard_cfg_warn.json";
   std::ofstream out(cfg_file);
-  out << R"({"sound_cooldown_ms":-5,"badge_min_px":-2,"badge_max_px":-1,"volume_percent":150})";
+  out << R"({"sound_cooldown_ms":150,"badge_min_px":-2,"badge_max_px":-1,"volume_percent":150})";
   out.close();
 
   auto sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(32);
@@ -222,7 +222,7 @@ TEST_CASE("logs warnings for adjusted values", "[config]") {
   bool saw_badge_max = false;
   bool saw_volume = false;
   for (const auto &line : sink->last_formatted()) {
-    if (line.find("sound_cooldown_ms") != std::string::npos)
+    if (line.find("sound_cooldown_ms is deprecated") != std::string::npos)
       saw_sound = true;
     if (line.find("badge_min_px") != std::string::npos)
       saw_badge_min = true;

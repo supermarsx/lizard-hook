@@ -1,6 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
-#include <thread>
 
 int g_start_calls = 0;
 int g_stop_calls = 0;
@@ -17,8 +16,6 @@ struct AudioTestAccess {
     return e.m_voices;
   }
 };
-
-using namespace std::chrono_literals;
 
 TEST_CASE("max_concurrent_playbacks respected", "[audio]") {
   lizard::audio::Engine eng;
@@ -43,8 +40,8 @@ TEST_CASE("max_concurrent_playbacks respected", "[audio]") {
   REQUIRE(playing == 16);
 }
 
-TEST_CASE("cooldown prevents rapid retriggers", "[audio]") {
-  lizard::audio::Engine eng(1, 50ms);
+TEST_CASE("play retriggers immediately", "[audio]") {
+  lizard::audio::Engine eng(1);
   AudioTestAccess::voices(eng).resize(1);
 
   g_start_calls = 0;
@@ -52,9 +49,8 @@ TEST_CASE("cooldown prevents rapid retriggers", "[audio]") {
 
   eng.play();
   eng.play();
-  REQUIRE(g_start_calls == 1);
-
-  std::this_thread::sleep_for(60ms);
   eng.play();
-  REQUIRE(g_start_calls == 2);
+
+  REQUIRE(g_start_calls == 3);
+  REQUIRE(g_stop_calls == 2);
 }
