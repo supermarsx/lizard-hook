@@ -14,6 +14,10 @@
 Lizard Hook is a lightweight cross-platform keyboard overlay that plays a short
 FLAC sample and spawns fading emoji badges without stealing focus.
 
+> **⚠️ Alpha Notice:** This project is in an early alpha state and may not be
+> fully functional yet. Expect missing features, rough edges, and breaking
+> changes between versions.
+
 ## Features
 
 - Global keyboard hook with audio and visual feedback
